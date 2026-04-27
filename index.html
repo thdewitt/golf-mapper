@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Course Mapper</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, system-ui, sans-serif; }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; background: #1b1d20; color: #fff; gap: 12px;
+  }
+  header h1 { font-size: 17px; margin: 0; }
+  header .muted { color: #8a8f98; font-size: 13px; font-weight: normal; margin-left: 8px; }
+  header .actions { display: flex; gap: 8px; }
+  header button { background: #3b82f6; color: white; border: 0; padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  header button.save { background: #22c55e; }
+  header button:hover { filter: brightness(1.1); }
+  #main { flex: 1; display: flex; min-height: 0; }
+  aside { width: 260px; background: #f5f6f8; border-right: 1px solid #dee0e4; overflow-y: auto; }
+  aside section { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
+  aside h2 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.5px; }
+  #hole-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .hole-chip {
+    padding: 10px 6px; text-align: center; font-weight: 600; font-size: 13px;
+    border: 1px solid #d1d5db; background: white; border-radius: 6px; cursor: pointer;
+    position: relative;
+  }
+  .hole-chip.active { background: #3b82f6; color: white; border-color: #3b82f6; }
+  .hole-chip.complete::after { content: ''; position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+  .hole-chip.has-fairway::before { content: ''; position: absolute; top: 3px; left: 3px; width: 8px; height: 8px; border-radius: 50%; background: #84cc16; }
+  .tool-btn { display: block; width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 4px; background: white; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .tool-btn.active { background: #f97316; color: white; border-color: #f97316; }
+  .tool-btn .hint { color: #6b7280; font-size: 11px; font-weight: normal; }
+  .tool-btn.active .hint { color: rgba(255,255,255,0.8); }
+  #map { flex: 1; background: #222; }
+
+  /* Shrink Leaflet.draw's default vertex/edit handles. The defaults are
+     chunky and make it hard to see the polygon you're tracing underneath.
+     Sized to match the small midpoint markers on the existing line. */
+  .leaflet-div-icon,
+  .leaflet-editing-icon,
+  .leaflet-draw-guide-dash {
+    width: 8px !important;
+    height: 8px !important;
+    margin-left: -4px !important;
+    margin-top: -4px !important;
+    background: #22c55e !important;
+    border: 1px solid white !important;
+    border-radius: 50% !important;
+    box-shadow: 0 0 2px rgba(0,0,0,0.5);
+  }
+  /* Mid-segment "add vertex here" markers — make them even smaller and lighter */
+  .leaflet-edit-marker-selected {
+    background: #f97316 !important;
+    border: 1px solid white !important;
+  }
+  /* Hide Leaflet.draw's "Click to start / Click to continue / Click to finish"
+     tooltip that follows the cursor — it obscures the feature you're tracing. */
+  .leaflet-draw-tooltip,
+  .leaflet-draw-tooltip-subtext { display: none !important; }
+  .hint-bar {
+    position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.8); color: white; padding: 6px 12px; border-radius: 16px;
+    font-size: 13px; z-index: 1000; display: none;
+  }
+  .hint-bar.show { display: block; }
+  .drop-zone {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(59, 130, 246, 0.15); pointer-events: none; font-size: 16px; color: #1b1d20;
+    opacity: 0; transition: opacity 0.15s; z-index: 2000;
+  }
+  .drop-zone.show { opacity: 1; }
+  .feature-count { color: #6b7280; font-size: 11px; margin-top: 6px; }
+  .hole-items { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+  .hole-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 6px; background: white; border: 1px solid #e5e7eb;
+    border-radius: 5px; font-size: 12px;
+  }
+  .hole-item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hole-item .swatch {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 5px; vertical-align: middle; border: 1px solid rgba(0,0,0,0.2);
+  }
+  .hole-item button {
+    background: transparent; border: 0; color: #ef4444; font-size: 14px;
+    cursor: pointer; padding: 0 4px;
+  }
+  .hole-item button:hover { color: #b91c1c; }
+  .tee-color-prompt input { padding: 4px 8px; font-size: 13px; }
+  .green-picker { display: flex; gap: 4px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+  .green-picker .label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
+  .green-picker button {
+    padding: 4px 10px; font-size: 12px; font-weight: 600;
+    border: 1px solid #d1d5db; background: white; color: #374151;
+    border-radius: 5px; cursor: pointer;
+  }
+  .green-picker button.active { background: #22c55e; color: white; border-color: #22c55e; }
+  .green-picker .add { background: #f3f4f6; color: #6b7280; font-weight: normal; }
+  .green-picker .remove { background: transparent; border: 0; color: #ef4444; padding: 0 4px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <h1 id="course-title">Course Mapper</h1>
+      <span id="course-sub" class="muted">No course loaded</span>
+    </div>
+    <div class="actions">
+      <button id="load-btn" title="Open a course JSON file">Load JSON</button>
+      <button class="save" id="save-btn" title="Download the updated JSON" disabled>Save JSON</button>
+      <!-- Off-screen rather than `hidden`: iOS Safari refuses to fire a
+           programmatic .click() on a display:none file input, but it
+           accepts opacity:0 with non-zero size. Without this the iPad
+           Load JSON button was a no-op. -->
+      <input type="file" id="file-input" accept=".json"
+             style="position:absolute; left:0; top:0; width:1px; height:1px; opacity:0; pointer-events:none;" />
+    </div>
+  </header>
+  <div id="main">
+    <aside>
+      <section>
+        <h2>Holes</h2>
+        <div id="hole-grid"></div>
+      </section>
+      <section>
+        <h2>Tools</h2>
+        <button class="tool-btn" data-tool="fairway">
+          <b>Draw Fairway</b><br>
+          <span class="hint">Trace playable grass — desert course grass edges</span>
+        </button>
+        <div class="green-picker" id="green-picker"></div>
+        <button class="tool-btn" data-tool="green-perimeter">
+          <b>Draw Green</b><br>
+          <span class="hint">Closed polygon around the green</span>
+        </button>
+        <button class="tool-btn" data-tool="bunker">
+          <b>Draw Bunker</b><br>
+          <span class="hint">Polygon around each bunker</span>
+        </button>
+        <button class="tool-btn" data-tool="water">
+          <b>Draw Water</b><br>
+          <span class="hint">Polygon or line for hazard shore</span>
+        </button>
+        <button class="tool-btn" data-tool="wash">
+          <b>Draw Wash / OB</b><br>
+          <span class="hint">Line across / along hole</span>
+        </button>
+        <button class="tool-btn" data-tool="tee">
+          <b>Drop Tee Marker</b><br>
+          <span class="hint">Click one spot — prompts for color</span>
+        </button>
+        <button class="tool-btn" data-tool="green-center">
+          <b>Drop Green Center</b>
+        </button>
+        <button class="tool-btn" data-tool="green-front">
+          <b>Drop Green Front</b>
+        </button>
+        <button class="tool-btn" data-tool="green-back">
+          <b>Drop Green Back</b>
+        </button>
+      </section>
+      <section>
+        <h2>This hole</h2>
+        <div id="hole-summary" class="feature-count">Load a course to begin.</div>
+        <div id="hole-items" class="hole-items"></div>
+      </section>
+    </aside>
+    <div id="map"></div>
+  </div>
+  <div class="hint-bar" id="hint-bar"></div>
+  <div class="drop-zone" id="drop-zone">Drop a .coursemap.json file to load</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script>
+  // -------- State --------
+  let course = null;
+  let currentHoleIdx = 0;
+  let activeTool = null;
+  let activeDrawer = null;
+  /// Index of the green that the green tools currently write to.
+  /// 0 = primary `hole.green`, 1+ = `hole.greensAlt[idx-1]`.
+  /// Resets to 0 every time we switch holes.
+  let currentGreenIdx = 0;
+
+  /// Returns the GreenCapture object the green-* tools should mutate. Creates
+  /// the entry on demand if greensAlt is short.
+  function activeGreen(hole) {
+    if (currentGreenIdx === 0) {
+      if (!hole.green) hole.green = { perimeter: [] };
+      return hole.green;
+    }
+    if (!Array.isArray(hole.greensAlt)) hole.greensAlt = [];
+    const altIdx = currentGreenIdx - 1;
+    while (hole.greensAlt.length <= altIdx) {
+      hole.greensAlt.push({ perimeter: [], label: greenLetter(hole.greensAlt.length + 1) });
+    }
+    return hole.greensAlt[altIdx];
+  }
+
+  /// Letter label for the Nth green on a hole. 0=A, 1=B, 2=C, etc.
+  function greenLetter(idx) { return String.fromCharCode(65 + idx); }
+
+  /// Returns [primary, ...alts]. Primary is always present (created if missing).
+  function allGreens(hole) {
+    if (!hole.green) hole.green = { perimeter: [] };
+    const alts = Array.isArray(hole.greensAlt) ? hole.greensAlt : [];
+    return [hole.green, ...alts];
+  }
+
+  /// Slightly different green tints so two greens on the same hole don't blend
+  /// together visually. Primary = bright green, alts step toward darker.
+  function greenTint(idx) {
+    const tints = ['#22c55e', '#15803d', '#0f5132', '#064e3b'];
+    return tints[Math.min(idx, tints.length - 1)];
+  }
+
+  // -------- Map --------
+  const map = L.map('map', { zoomControl: true }).setView([32.445, -111.12], 17); // Marana AZ default
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Imagery &copy; Esri',
+    maxZoom: 22,
+    maxNativeZoom: 19,
+  }).addTo(map);
+
+  const layers = {
+    tees: L.layerGroup().addTo(map),
+    green: L.layerGroup().addTo(map),
+    features: L.layerGroup().addTo(map),
+    fairway: L.layerGroup().addTo(map),
+  };
+
+  // -------- Utility --------
+  function isoNow() { return new Date().toISOString(); }
+
+  function latlngToMapPoint(ll) {
+    return {
+      latitude: ll.lat,
+      longitude: ll.lng,
+      accuracy: 3,                 // satellite-trace nominal
+      sampleCount: 1,
+      capturedAt: isoNow(),
+      source: 'satellite',
+    };
+  }
+
+  function teeColorHex(color) {
+    const c = (color || '').toLowerCase();
+    if (c === 'black') return '#000';
+    if (c.includes('blue') || c === 'azul') return '#3b82f6';
+    if (c.includes('white') || c === 'blanco') return '#f3f4f6';
+    if (c === 'gold' || c === 'yellow' || c === 'dorado') return '#fbbf24';
+    if (c === 'green' || c === 'verde') return '#22c55e';
+    if (c === 'red' || c === 'rojo') return '#ef4444';
+    return '#6366f1';
+  }
+
+  function featureColorHex(type) {
+    switch ((type || '').toLowerCase()) {
+      case 'bunker': case 'fairway bunker': return '#fbbf24';
+      case 'water': return '#2563eb';
+      case 'wash': case 'waste area': return '#8b5e3c';
+      case 'trees': return '#16a34a';
+      case 'ob': return '#dc2626';
+      case 'cart path': return '#6b7280';
+      default: return '#a855f7';
+    }
+  }
+
+  function divIcon(color, label) {
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        width:26px;height:26px;border-radius:50%;
+        background:${color};color:#fff;
+        border:2px solid white;
+        display:flex;align-items:center;justify-content:center;
+        font:700 12px -apple-system,system-ui,sans-serif;
+        box-shadow:0 1px 3px rgba(0,0,0,0.4);
+      ">${label}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+    });
+  }
+
+  function showHint(text) {
+    const bar = document.getElementById('hint-bar');
+    bar.textContent = text;
+    bar.classList.add('show');
+  }
+  function hideHint() {
+    document.getElementById('hint-bar').classList.remove('show');
+  }
+
+  // -------- Load / Save --------
+  //
+  // If the browser supports the File System Access API (Safari 15.2+,
+  // Chrome/Edge), loading a JSON remembers a handle to that exact file, and
+  // subsequent saves write straight back to it — no "-2" duplicates in
+  // Downloads, no drag-into-iCloud step. Falls back to the old download flow
+  // in older browsers.
+  let fileHandle = null;
+
+  // File System Access API: present in Chrome/Edge desktop, missing in
+  // Safari. iPadOS sometimes reports "MacIntel" with touch points so we
+  // detect it both ways and skip FSA on touch-Safari either way — the
+  // FSA picker call hangs there, and the post-await fallback to
+  // input.click() falls outside the user-gesture context iOS demands.
+  const isTouchSafari =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const supportsFSA = !isTouchSafari && typeof window.showOpenFilePicker === 'function';
+
+  document.getElementById('load-btn').onclick = async () => {
+    if (supportsFSA) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [{ description: 'Course Map JSON', accept: { 'application/json': ['.json'] } }],
+          multiple: false,
+        });
+        fileHandle = handle;
+        const file = await handle.getFile();
+        handleFile(file);
+        showStatus(`Linked: ${handle.name}`);
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          console.error(e);
+          // Fallback if showOpenFilePicker throws for some reason
+          document.getElementById('file-input').click();
+        }
+      }
+    } else {
+      document.getElementById('file-input').click();
+    }
+  };
+  document.getElementById('file-input').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) handleFile(e.target.files[0]);
+  });
+
+  // Drag-drop
+  const dropZone = document.getElementById('drop-zone');
+  let dragCounter = 0;
+  window.addEventListener('dragenter', (e) => { e.preventDefault(); dragCounter++; dropZone.classList.add('show'); });
+  window.addEventListener('dragleave', (e) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) dropZone.classList.remove('show'); });
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    dropZone.classList.remove('show');
+    if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+  });
+
+  function handleFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        let data = JSON.parse(e.target.result);
+        if (Array.isArray(data)) data = data[0];
+        if (!data || !data.holes) { alert('This does not look like a CourseMap JSON.'); return; }
+        course = data;
+        currentHoleIdx = 0;
+        document.getElementById('course-title').textContent = `${course.clubName} — ${course.courseName}`;
+        document.getElementById('course-sub').textContent = `${course.holes.length} holes`;
+        document.getElementById('save-btn').disabled = false;
+        renderHoleGrid();
+        selectHole(0);
+      } catch (err) {
+        alert('Bad JSON: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  document.getElementById('save-btn').onclick = async () => {
+    if (!course) return;
+    course.updatedAt = isoNow();
+    const json = JSON.stringify(course, null, 2);
+
+    // Path 1: we have a handle from the Load picker — overwrite in place.
+    if (fileHandle && fileHandle.createWritable) {
+      try {
+        const writable = await fileHandle.createWritable();
+        await writable.write(json);
+        await writable.close();
+        showStatus(`Saved: ${fileHandle.name}`);
+        return;
+      } catch (e) {
+        console.error('Save to existing handle failed', e);
+        // Fall through to picker below.
+      }
+    }
+
+    // Path 2: no handle yet but browser supports the File System Access API —
+    // let the user pick where to save, then remember that handle for future
+    // saves this session.
+    if (supportsFSA) {
+      try {
+        const safe = `${course.clubName}-${course.courseName}`.replace(/[^a-zA-Z0-9-_]/g, '_');
+        const handle = await window.showSaveFilePicker({
+          suggestedName: `${safe}.coursemap.json`,
+          types: [{ description: 'Course Map JSON', accept: { 'application/json': ['.json'] } }],
+        });
+        fileHandle = handle;
+        const writable = await handle.createWritable();
+        await writable.write(json);
+        await writable.close();
+        showStatus(`Saved: ${handle.name}`);
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;  // user cancelled
+        console.error('Save picker failed', e);
+      }
+    }
+
+    // Path 3: old browsers — trigger a regular download into Downloads/.
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const safe = `${course.clubName}-${course.courseName}`.replace(/[^a-zA-Z0-9-_]/g, '_');
+    a.download = `${safe}.coursemap.json`;
+    a.click();
+    showStatus('Downloaded (no direct save support).');
+  };
+
+  /// Brief overlay text so the user sees that a save happened.
+  function showStatus(text) {
+    let el = document.getElementById('status-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'status-toast';
+      Object.assign(el.style, {
+        position: 'fixed', bottom: '20px', left: '50%',
+        transform: 'translateX(-50%)',
+        background: 'rgba(34,197,94,0.95)', color: 'white',
+        padding: '8px 16px', borderRadius: '20px',
+        fontSize: '13px', fontWeight: '600', zIndex: 10000,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        opacity: 0, transition: 'opacity 0.15s',
+      });
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    requestAnimationFrame(() => { el.style.opacity = 1; });
+    clearTimeout(showStatus._t);
+    showStatus._t = setTimeout(() => { el.style.opacity = 0; }, 2000);
+  }
+
+  // -------- Hole list --------
+  function holeProgress(hole) {
+    let done = 0;
+    if (hole.teeBoxes.some(t => t.center || t.backCenter)) done++;
+    if (hole.green.center) done++;
+    if (hole.green.front) done++;
+    if (hole.green.back) done++;
+    if (hole.green.perimeter && hole.green.perimeter.length > 0) done++;
+    return done / 5;
+  }
+
+  function renderHoleGrid() {
+    const grid = document.getElementById('hole-grid');
+    grid.innerHTML = '';
+    course.holes.forEach((hole, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'hole-chip';
+      if (idx === currentHoleIdx) chip.classList.add('active');
+      if (holeProgress(hole) >= 1) chip.classList.add('complete');
+      if (hole.fairwayPerimeter && hole.fairwayPerimeter.length >= 3) chip.classList.add('has-fairway');
+      chip.textContent = hole.number;
+      chip.onclick = () => selectHole(idx);
+      grid.appendChild(chip);
+    });
+  }
+
+  function selectHole(idx) {
+    currentHoleIdx = idx;
+    currentGreenIdx = 0;  // always reset to primary when changing holes
+    renderHoleGrid();
+    renderHole();
+    updateHoleSummary();
+    renderGreenPicker();
+  }
+
+  /// Renders the "Editing Green: A | B | + Add green" picker above the green tools.
+  /// Hidden if the hole has only one green and no alts have been added yet.
+  function renderGreenPicker() {
+    const wrap = document.getElementById('green-picker');
+    wrap.innerHTML = '';
+    if (!course) return;
+    const hole = course.holes[currentHoleIdx];
+    const greens = allGreens(hole);
+    const hasAlts = greens.length > 1;
+
+    if (!hasAlts) {
+      // Just an "Add second green" affordance — no toggle needed yet.
+      const add = document.createElement('button');
+      add.className = 'add';
+      add.textContent = '+ Add second green (e.g. A/B greens)';
+      add.onclick = () => {
+        if (!Array.isArray(hole.greensAlt)) hole.greensAlt = [];
+        hole.greensAlt.push({ perimeter: [], label: 'B' });
+        if (!hole.green.label) hole.green.label = 'A';
+        currentGreenIdx = 1;  // jump to editing the new green
+        renderGreenPicker();
+        refresh();
+      };
+      wrap.appendChild(add);
+      return;
+    }
+
+    const lbl = document.createElement('span');
+    lbl.className = 'label';
+    lbl.textContent = 'Editing:';
+    wrap.appendChild(lbl);
+
+    greens.forEach((g, i) => {
+      const btn = document.createElement('button');
+      btn.textContent = g.label || greenLetter(i);
+      if (i === currentGreenIdx) btn.classList.add('active');
+      btn.onclick = () => { currentGreenIdx = i; renderGreenPicker(); };
+      wrap.appendChild(btn);
+    });
+
+    // "+" to add another alternate
+    const add = document.createElement('button');
+    add.className = 'add';
+    add.textContent = '+';
+    add.title = 'Add another green';
+    add.onclick = () => {
+      if (!Array.isArray(hole.greensAlt)) hole.greensAlt = [];
+      hole.greensAlt.push({ perimeter: [], label: greenLetter(greens.length) });
+      currentGreenIdx = greens.length;
+      renderGreenPicker();
+      refresh();
+    };
+    wrap.appendChild(add);
+
+    // Allow removing the currently selected ALT green (never the primary).
+    if (currentGreenIdx > 0) {
+      const rm = document.createElement('button');
+      rm.className = 'remove';
+      rm.textContent = '✕';
+      rm.title = `Remove green ${greens[currentGreenIdx].label || greenLetter(currentGreenIdx)}`;
+      rm.onclick = () => {
+        if (!confirm('Remove this alternate green and all its captures?')) return;
+        hole.greensAlt.splice(currentGreenIdx - 1, 1);
+        if (hole.greensAlt.length === 0) delete hole.greensAlt;
+        currentGreenIdx = 0;
+        renderGreenPicker();
+        refresh();
+      };
+      wrap.appendChild(rm);
+    }
+  }
+
+  // -------- Render hole on map --------
+  function clearMapLayers() {
+    Object.values(layers).forEach(l => l.clearLayers());
+  }
+
+  function renderHole() {
+    clearMapLayers();
+    const hole = course.holes[currentHoleIdx];
+    const bounds = [];
+
+    (hole.teeBoxes || []).forEach(tee => {
+      const p = tee.center || tee.backCenter;
+      if (p) {
+        const m = L.marker([p.latitude, p.longitude], {
+          icon: divIcon(teeColorHex(tee.color), (tee.color || '?').charAt(0).toUpperCase()),
+        }).bindTooltip(`${tee.color} tee`);
+        m.addTo(layers.tees);
+        bounds.push([p.latitude, p.longitude]);
+      }
+    });
+
+    const greens = allGreens(hole);
+    const hasMultiple = greens.length > 1;
+    greens.forEach((g, gi) => {
+      if (!g) return;
+      const tint = greenTint(gi);
+      const tag = hasMultiple ? (g.label || greenLetter(gi)) : '';
+      const lbl = (s) => hasMultiple ? `${s}${tag}` : s;
+      const tip = (s) => hasMultiple ? `Green ${tag} ${s}` : `Green ${s}`;
+      if (g.center) {
+        L.marker([g.center.latitude, g.center.longitude], { icon: divIcon(tint, lbl('C')) }).bindTooltip(tip('Center')).addTo(layers.green);
+        bounds.push([g.center.latitude, g.center.longitude]);
+      }
+      if (g.front) L.marker([g.front.latitude, g.front.longitude], { icon: divIcon(tint, lbl('F')) }).bindTooltip(tip('Front')).addTo(layers.green);
+      if (g.back)  L.marker([g.back.latitude, g.back.longitude],   { icon: divIcon(tint, lbl('B')) }).bindTooltip(tip('Back')).addTo(layers.green);
+      if (g.perimeter && g.perimeter.length >= 3) {
+        L.polygon(g.perimeter.map(p => [p.latitude, p.longitude]), { color: tint, fillOpacity: 0.25, weight: 2 }).bindTooltip(tip('Perimeter')).addTo(layers.green);
+      }
+    });
+
+    (hole.features || []).forEach(f => {
+      const pts = (f.points || []).map(p => [p.latitude, p.longitude]);
+      const color = featureColorHex(f.type);
+      if (f.shape === 'Polygon' && pts.length >= 3) {
+        L.polygon(pts, { color, fillOpacity: 0.25, weight: 2 }).bindTooltip(f.name).addTo(layers.features);
+      } else if (f.shape === 'Line' && pts.length >= 2) {
+        L.polyline(pts, { color, weight: 3 }).bindTooltip(f.name).addTo(layers.features);
+      } else if (pts.length >= 1) {
+        L.marker(pts[0], { icon: divIcon(color, '·') }).bindTooltip(f.name).addTo(layers.features);
+      }
+    });
+
+    if (hole.fairwayPerimeter && hole.fairwayPerimeter.length >= 3) {
+      L.polygon(hole.fairwayPerimeter.map(p => [p.latitude, p.longitude]), {
+        color: '#84cc16',
+        fillColor: '#84cc16',
+        fillOpacity: 0.15,
+        weight: 2,
+        dashArray: '4,4',
+      }).bindTooltip('Fairway').addTo(layers.fairway);
+      hole.fairwayPerimeter.forEach(p => bounds.push([p.latitude, p.longitude]));
+    }
+
+    if (bounds.length > 0) {
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
+    }
+  }
+
+  function updateHoleSummary() {
+    if (!course) return;
+    const h = course.holes[currentHoleIdx];
+    const bits = [];
+    bits.push(`Hole ${h.number}`);
+    if (h.par) bits.push(`Par ${h.par}`);
+    document.getElementById('hole-summary').textContent = bits.join(' • ');
+    renderHoleItemList(h);
+  }
+
+  /// Build a list of every capture on the current hole with a × delete button
+  /// per row. Organised: tees, green components, fairway, then features.
+  function renderHoleItemList(h) {
+    const container = document.getElementById('hole-items');
+    container.innerHTML = '';
+
+    const addRow = ({ label, color, onDelete }) => {
+      const row = document.createElement('div');
+      row.className = 'hole-item';
+      const left = document.createElement('span');
+      left.className = 'label';
+      if (color) {
+        const sw = document.createElement('span');
+        sw.className = 'swatch';
+        sw.style.background = color;
+        left.appendChild(sw);
+      }
+      left.appendChild(document.createTextNode(label));
+      const btn = document.createElement('button');
+      btn.textContent = '✕';
+      btn.title = 'Delete';
+      btn.onclick = onDelete;
+      row.appendChild(left);
+      row.appendChild(btn);
+      container.appendChild(row);
+    };
+
+    // Tees
+    (h.teeBoxes || []).forEach(tb => {
+      const p = tb.center || tb.backCenter;
+      if (!p) return;
+      addRow({
+        label: `${tb.color} tee`,
+        color: teeColorHex(tb.color),
+        onDelete: () => {
+          tb.center = null;
+          tb.backCenter = null;
+          refresh();
+        },
+      });
+    });
+
+    // Green pieces — one block per green (primary + any alts)
+    const greens = allGreens(h);
+    const hasMultipleGreens = greens.length > 1;
+    greens.forEach((g, gi) => {
+      const tint = greenTint(gi);
+      const tag = hasMultipleGreens ? ` ${g.label || greenLetter(gi)}` : '';
+      if (g.center) {
+        addRow({
+          label: `Green${tag} center`,
+          color: tint,
+          onDelete: () => { g.center = null; refresh(); },
+        });
+      }
+      if (g.front) {
+        addRow({
+          label: `Green${tag} front`,
+          color: tint,
+          onDelete: () => { g.front = null; refresh(); },
+        });
+      }
+      if (g.back) {
+        addRow({
+          label: `Green${tag} back`,
+          color: tint,
+          onDelete: () => { g.back = null; refresh(); },
+        });
+      }
+      if (g.perimeter && g.perimeter.length >= 3) {
+        addRow({
+          label: `Green${tag} perimeter (${g.perimeter.length}pt)`,
+          color: tint,
+          onDelete: () => { g.perimeter = []; refresh(); },
+        });
+      }
+    });
+
+    // Fairway
+    if (h.fairwayPerimeter && h.fairwayPerimeter.length >= 3) {
+      addRow({
+        label: `Fairway (${h.fairwayPerimeter.length}pt)`,
+        color: '#84cc16',
+        onDelete: () => { h.fairwayPerimeter = null; refresh(); },
+      });
+    }
+
+    // Features — by name
+    (h.features || []).forEach((feat, idx) => {
+      addRow({
+        label: `${feat.name} — ${feat.type} (${feat.shape}${feat.points ? `, ${feat.points.length}pt` : ''})`,
+        color: featureColorHex(feat.type),
+        onDelete: () => {
+          h.features.splice(idx, 1);
+          refresh();
+        },
+      });
+    });
+
+    if (container.children.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'feature-count';
+      empty.textContent = 'No captures on this hole yet.';
+      container.appendChild(empty);
+    }
+  }
+
+  /// Re-render map + hole grid + item list after a mutation.
+  function refresh() {
+    renderHole();
+    renderHoleGrid();
+    updateHoleSummary();
+    renderGreenPicker();
+  }
+
+  // -------- Tools --------
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+    btn.onclick = () => {
+      if (!course) { alert('Load a course first.'); return; }
+      const tool = btn.dataset.tool;
+      if (activeTool === tool) { cancelTool(); return; }
+      cancelTool();
+      activeTool = tool;
+      btn.classList.add('active');
+      startTool(tool);
+    };
+  });
+
+  function cancelTool() {
+    document.querySelectorAll('.tool-btn.active').forEach(b => b.classList.remove('active'));
+    if (activeDrawer) { try { activeDrawer.disable(); } catch {} activeDrawer = null; }
+    hideHint();
+    activeTool = null;
+  }
+
+  function startTool(tool) {
+    switch (tool) {
+      case 'fairway':
+        drawPolygon('#84cc16', 'Click to trace fairway perimeter. Double-click last point to finish.', (pts) => {
+          course.holes[currentHoleIdx].fairwayPerimeter = pts.map(latlngToMapPoint);
+          renderHole(); renderHoleGrid(); updateHoleSummary();
+        });
+        break;
+      case 'green-perimeter': {
+        const hole = course.holes[currentHoleIdx];
+        const tint = greenTint(currentGreenIdx);
+        const tag = currentGreenIdx > 0 ? ` ${(allGreens(hole)[currentGreenIdx].label) || greenLetter(currentGreenIdx)}` : '';
+        drawPolygon(tint, `Click to trace green${tag}. Double-click to finish.`, (pts) => {
+          activeGreen(course.holes[currentHoleIdx]).perimeter = pts.map(latlngToMapPoint);
+          renderHole(); renderHoleGrid(); updateHoleSummary();
+        });
+        break;
+      }
+      case 'bunker':
+        drawPolygon('#fbbf24', 'Trace bunker perimeter. Double-click to finish.', (pts) => {
+          const name = prompt('Bunker name (e.g. "Greenside Right"):', 'Bunker');
+          if (name === null) return;
+          addFeature('Bunker', 'Polygon', name, pts);
+        });
+        break;
+      case 'water':
+        askShape('Water', '#2563eb');
+        break;
+      case 'wash':
+        drawPolyline('#8b5e3c', 'Click to trace the line. Double-click to finish.', (pts) => {
+          const type = confirm('OK for OB, Cancel for Wash') ? 'OB' : 'Wash';
+          const name = prompt(`${type} name:`, type);
+          if (name === null) return;
+          addFeature(type, 'Line', name, pts);
+        });
+        break;
+      case 'tee':
+        showHint('Click the tee location, then enter the color.');
+        onceMapClick((ll) => {
+          const color = prompt('Tee color (e.g. Azul, Verde, Rojo):', '');
+          if (!color) return;
+          dropTee(color, ll);
+        });
+        break;
+      case 'green-center': case 'green-front': case 'green-back': {
+        const slot = tool.replace('green-', '');
+        const hole = course.holes[currentHoleIdx];
+        const tag = currentGreenIdx > 0 ? ` ${(allGreens(hole)[currentGreenIdx].label) || greenLetter(currentGreenIdx)}` : '';
+        showHint(`Click the ${slot} of green${tag}.`);
+        onceMapClick((ll) => {
+          activeGreen(course.holes[currentHoleIdx])[slot] = latlngToMapPoint(ll);
+          renderHole(); renderHoleGrid(); updateHoleSummary();
+        });
+        break;
+      }
+    }
+  }
+
+  function askShape(typeLabel, color) {
+    const useLine = confirm(`${typeLabel}: OK for closed polygon (full pond), Cancel for line (shore).`);
+    if (useLine) {
+      drawPolygon(color, `Trace ${typeLabel} polygon.`, (pts) => {
+        const name = prompt(`${typeLabel} name:`, typeLabel);
+        if (name === null) return;
+        addFeature(typeLabel, 'Polygon', name, pts);
+      });
+    } else {
+      drawPolyline(color, `Trace ${typeLabel} shoreline.`, (pts) => {
+        const name = prompt(`${typeLabel} name:`, typeLabel);
+        if (name === null) return;
+        addFeature(typeLabel, 'Line', name, pts);
+      });
+    }
+  }
+
+  function drawPolygon(color, hintText, onDone) {
+    showHint(hintText);
+    activeDrawer = new L.Draw.Polygon(map, { shapeOptions: { color, fillColor: color, fillOpacity: 0.3, weight: 2 } });
+    activeDrawer.enable();
+    map.once(L.Draw.Event.CREATED, (e) => {
+      const latlngs = e.layer.getLatLngs()[0];
+      onDone(latlngs);
+      cancelTool();
+    });
+  }
+
+  function drawPolyline(color, hintText, onDone) {
+    showHint(hintText);
+    activeDrawer = new L.Draw.Polyline(map, { shapeOptions: { color, weight: 3 } });
+    activeDrawer.enable();
+    map.once(L.Draw.Event.CREATED, (e) => {
+      const latlngs = e.layer.getLatLngs();
+      onDone(latlngs);
+      cancelTool();
+    });
+  }
+
+  function onceMapClick(cb) {
+    const h = (e) => { map.off('click', h); hideHint(); cb(e.latlng); cancelTool(); };
+    map.on('click', h);
+  }
+
+  function addFeature(type, shape, name, latlngs) {
+    const feature = {
+      id: crypto.randomUUID().toUpperCase(),
+      type: type,
+      name: name,
+      shape: shape,
+      points: latlngs.map(latlngToMapPoint),
+    };
+    course.holes[currentHoleIdx].features.push(feature);
+    renderHole();
+    updateHoleSummary();
+  }
+
+  function dropTee(color, ll) {
+    const hole = course.holes[currentHoleIdx];
+    let tee = (hole.teeBoxes || []).find(t => (t.color || '').toLowerCase() === color.toLowerCase());
+    if (!tee) {
+      tee = {
+        id: crypto.randomUUID().toUpperCase(),
+        color: color,
+        perimeter: [],
+      };
+      hole.teeBoxes.push(tee);
+    }
+    tee.center = latlngToMapPoint(ll);
+    renderHole(); renderHoleGrid(); updateHoleSummary();
+  }
+
+  // Escape key cancels any active tool
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') cancelTool();
+  });
+</script>
+</body>
+</html>
