@@ -35,6 +35,10 @@
   .hole-chip.has-fairway::before { content: ''; position: absolute; top: 3px; left: 3px; width: 8px; height: 8px; border-radius: 50%; background: #84cc16; }
   .tool-btn { display: block; width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 4px; background: white; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; font-size: 13px; }
   .tool-btn.active { background: #f97316; color: white; border-color: #f97316; }
+  .tool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* Save button — green when enabled. */
+  #save-btn:not(:disabled) { background: #dcfce7; border-color: #86efac; }
+  #save-btn:not(:disabled) b { color: #166534; }
   .tool-btn .hint { color: #6b7280; font-size: 11px; font-weight: normal; }
   .tool-btn.active .hint { color: rgba(255,255,255,0.8); }
   #map { flex: 1; background: #222; }
@@ -112,19 +116,25 @@
       <h1 id="course-title">Course Mapper</h1>
       <span id="course-sub" class="muted">No course loaded</span>
     </div>
-    <div class="actions">
-      <button id="load-btn" title="Open a course JSON file">Load JSON</button>
-      <button class="save" id="save-btn" title="Download the updated JSON" disabled>Save JSON</button>
-      <!-- Off-screen rather than `hidden`: iOS Safari refuses to fire a
-           programmatic .click() on a display:none file input, but it
-           accepts opacity:0 with non-zero size. Without this the iPad
-           Load JSON button was a no-op. -->
-      <input type="file" id="file-input" accept=".json"
-             style="position:absolute; left:0; top:0; width:1px; height:1px; opacity:0; pointer-events:none;" />
-    </div>
+    <!-- Off-screen rather than `hidden`: iOS Safari refuses to fire a
+         programmatic .click() on a display:none file input, but it
+         accepts opacity:0 with non-zero size. -->
+    <input type="file" id="file-input" accept=".json"
+           style="position:absolute; left:0; top:0; width:1px; height:1px; opacity:0; pointer-events:none;" />
   </header>
   <div id="main">
     <aside>
+      <section>
+        <h2>Course</h2>
+        <button class="tool-btn" id="load-btn" title="Open a course JSON file">
+          <b>Load JSON</b><br>
+          <span class="hint">Open an existing course file</span>
+        </button>
+        <button class="tool-btn" id="save-btn" title="Save the updated JSON" disabled>
+          <b>Save JSON</b><br>
+          <span class="hint">Disabled until a course is loaded</span>
+        </button>
+      </section>
       <section>
         <h2>Holes</h2>
         <div id="hole-grid"></div>
@@ -152,9 +162,24 @@
           <b>Draw Wash / OB</b><br>
           <span class="hint">Line across / along hole</span>
         </button>
-        <button class="tool-btn" data-tool="tee">
-          <b>Drop Tee Marker</b><br>
-          <span class="hint">Click one spot — prompts for color</span>
+        <!-- Quick-drop tee buttons. Pick a color, then tap once on the
+             map. No prompt. The "Other..." button keeps the old
+             type-in-color flow for unusual tees. -->
+        <button class="tool-btn" data-tool="tee-rojo">
+          <b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;border:1px solid #fff;vertical-align:middle;margin-right:6px;"></span>Drop Rojo Tee</b>
+        </button>
+        <button class="tool-btn" data-tool="tee-verde">
+          <b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;border:1px solid #fff;vertical-align:middle;margin-right:6px;"></span>Drop Verde Tee</b>
+        </button>
+        <button class="tool-btn" data-tool="tee-azul">
+          <b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;border:1px solid #fff;vertical-align:middle;margin-right:6px;"></span>Drop Azul Tee</b>
+        </button>
+        <button class="tool-btn" data-tool="tee-dorado">
+          <b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fbbf24;border:1px solid #fff;vertical-align:middle;margin-right:6px;"></span>Drop Dorado Tee</b>
+        </button>
+        <button class="tool-btn" data-tool="tee-other">
+          <b>Drop Other Tee...</b><br>
+          <span class="hint">Type the color, then tap the map</span>
         </button>
         <button class="tool-btn" data-tool="green-center">
           <b>Drop Green Center</b>
@@ -164,6 +189,21 @@
         </button>
         <button class="tool-btn" data-tool="green-back">
           <b>Drop Green Back</b>
+        </button>
+      </section>
+      <section id="drawing-controls" style="display:none">
+        <h2>Drawing</h2>
+        <button class="tool-btn" id="undo-point-btn">
+          <b>Undo Last Point</b><br>
+          <span class="hint">Removes the most recent click while drawing</span>
+        </button>
+        <button class="tool-btn" id="finish-shape-btn">
+          <b>Finish Shape</b><br>
+          <span class="hint">Closes the polygon (or use double-tap)</span>
+        </button>
+        <button class="tool-btn" id="cancel-tool-btn">
+          <b>Cancel</b><br>
+          <span class="hint">Discard this drawing</span>
         </button>
       </section>
       <section>
@@ -250,6 +290,108 @@
       capturedAt: isoNow(),
       source: 'satellite',
     };
+  }
+
+  // ---- Geometry helpers (for auto-naming bunkers) ----
+
+  /// Haversine distance in meters between two lat/lng points.
+  function distanceMeters(a, b) {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const lat1 = toRad(a.latitude ?? a.lat), lat2 = toRad(b.latitude ?? b.lat);
+    const dLat = lat2 - lat1;
+    const dLng = toRad((b.longitude ?? b.lng) - (a.longitude ?? a.lng));
+    const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  /// Centroid (simple average) of an array of {latitude, longitude} points.
+  function centroidOf(points) {
+    if (!points || !points.length) return null;
+    let lat = 0, lng = 0;
+    for (const p of points) { lat += (p.latitude ?? p.lat); lng += (p.longitude ?? p.lng); }
+    return { latitude: lat / points.length, longitude: lng / points.length };
+  }
+
+  /// Convert a small lat/lng delta to local east/north meters using a
+  /// simple equirectangular projection. Plenty accurate for sub-1km
+  /// distances, which is all bunker geometry needs.
+  function localOffsetMeters(origin, target) {
+    const toRad = (d) => (d * Math.PI) / 180;
+    const lat0 = toRad(origin.latitude);
+    const dLat = toRad(target.latitude - origin.latitude);
+    const dLng = toRad(target.longitude - origin.longitude);
+    const east = dLng * Math.cos(lat0) * 6371000;
+    const north = dLat * 6371000;
+    return { east, north };
+  }
+
+  /// For a bunker on a fairway, classify Left / Right / Center relative to
+  /// the play axis from tee to green. Returns one of "Left", "Right",
+  /// "Center". `tee`, `green`, `bunker` are {latitude, longitude}.
+  function fairwayBunkerSide(tee, green, bunker) {
+    if (!tee || !green) return '';
+    const playAxis = localOffsetMeters(tee, green);  // from tee toward green
+    const axisLen = Math.hypot(playAxis.east, playAxis.north);
+    if (axisLen < 1) return '';
+    // Unit vectors: forward = play direction, right = 90° clockwise.
+    const fx = playAxis.east / axisLen, fy = playAxis.north / axisLen;
+    const rx = fy, ry = -fx;
+    const off = localOffsetMeters(tee, bunker);
+    const lateral = off.east * rx + off.north * ry;  // + = right of play line
+    if (Math.abs(lateral) < 8) return 'Center';
+    return lateral > 0 ? 'Right' : 'Left';
+  }
+
+  /// For a bunker hugging the green, classify Front / Back / Left / Right
+  /// relative to the play direction, where Front = between tee and green.
+  function greenBunkerSide(tee, green, bunker) {
+    if (!tee || !green) return '';
+    const playAxis = localOffsetMeters(tee, green);
+    const axisLen = Math.hypot(playAxis.east, playAxis.north);
+    if (axisLen < 1) return '';
+    const fx = playAxis.east / axisLen, fy = playAxis.north / axisLen;
+    const rx = fy, ry = -fx;
+    const off = localOffsetMeters(green, bunker);  // bunker relative to green
+    const along = off.east * fx + off.north * fy;       // + = past green (back)
+    const lateral = off.east * rx + off.north * ry;     // + = right
+    // Pick the dominant axis. Front/back if mostly along the play line,
+    // left/right otherwise.
+    if (Math.abs(along) >= Math.abs(lateral)) {
+      return along >= 0 ? 'Back' : 'Front';
+    }
+    return lateral >= 0 ? 'Right' : 'Left';
+  }
+
+  /// Build an auto-name for a bunker on the current hole, e.g. "FB #2 Right"
+  /// or "GB #1 Front". Uses tee + green-center to determine play direction;
+  /// falls back to a plain "Bunker N" if those aren't drawn yet.
+  function autoBunkerName(hole, bunkerPolygon) {
+    const center = centroidOf(bunkerPolygon);
+    if (!center) return `Bunker ${(hole.features || []).length + 1}`;
+
+    // Pick a representative tee (back-most preferred — often Rojo or Negro).
+    const tee = (hole.teeBoxes || [])
+      .map(t => t.center || t.backCenter)
+      .filter(Boolean)[0];
+    const green = hole.green && (hole.green.center || centroidOf(hole.green.perimeter));
+
+    // GB if within ~25m of the green, else FB.
+    const distFromGreen = (green && distanceMeters(center, green)) || 999;
+    const isGB = distFromGreen < 25;
+    const prefix = isGB ? 'GB' : 'FB';
+
+    // Number = 1 + count of existing same-prefix bunkers on this hole.
+    const existing = (hole.features || []).filter(f =>
+      (f.type === 'Bunker') && (f.name || '').startsWith(prefix + ' ')
+    ).length;
+    const num = existing + 1;
+
+    const side = isGB
+      ? greenBunkerSide(tee, green, center)
+      : fairwayBunkerSide(tee, green, center);
+
+    return side ? `${prefix} #${num} ${side}` : `${prefix} #${num}`;
   }
 
   function teeColorHex(color) {
@@ -771,7 +913,32 @@
     if (activeDrawer) { try { activeDrawer.disable(); } catch {} activeDrawer = null; }
     hideHint();
     activeTool = null;
+    // Hide drawing controls when nothing's active.
+    const dc = document.getElementById('drawing-controls');
+    if (dc) dc.style.display = 'none';
   }
+
+  /// Make the Drawing section visible. Called when we kick off a polygon
+  /// or polyline so the user has Undo / Finish / Cancel buttons handy.
+  function showDrawingControls() {
+    const dc = document.getElementById('drawing-controls');
+    if (dc) dc.style.display = '';
+  }
+
+  // Drawing-control button wiring. Always installed once at startup; the
+  // section is just hidden until a draw starts.
+  document.getElementById('undo-point-btn').onclick = () => {
+    if (activeDrawer && typeof activeDrawer.deleteLastVertex === 'function') {
+      activeDrawer.deleteLastVertex();
+    }
+  };
+  document.getElementById('finish-shape-btn').onclick = () => {
+    if (activeDrawer && typeof activeDrawer.completeShape === 'function') {
+      // Polygon: needs at least 3 points. Polyline: needs at least 2.
+      activeDrawer.completeShape();
+    }
+  };
+  document.getElementById('cancel-tool-btn').onclick = () => cancelTool();
 
   function startTool(tool) {
     switch (tool) {
@@ -792,9 +959,13 @@
         break;
       }
       case 'bunker':
-        drawPolygon('#fbbf24', 'Trace bunker perimeter. Double-click to finish.', (pts) => {
-          const name = prompt('Bunker name (e.g. "Greenside Right"):', 'Bunker');
-          if (name === null) return;
+        drawPolygon('#fbbf24', 'Trace bunker perimeter. Double-tap to finish.', (pts) => {
+          const hole = course.holes[currentHoleIdx];
+          // Convert L.LatLng[] to MapPoint[] so the geometry helpers
+          // can read .latitude/.longitude consistently.
+          const polyMP = pts.map(latlngToMapPoint);
+          const name = autoBunkerName(hole, polyMP);
+          showStatus(`Auto-named: ${name}`);
           addFeature('Bunker', 'Polygon', name, pts);
         });
         break;
@@ -809,10 +980,21 @@
           addFeature(type, 'Line', name, pts);
         });
         break;
-      case 'tee':
+      case 'tee-rojo':
+      case 'tee-verde':
+      case 'tee-azul':
+      case 'tee-dorado': {
+        // Color is encoded in the tool id — capitalize for the tee record.
+        const color = tool.split('-')[1];
+        const pretty = color.charAt(0).toUpperCase() + color.slice(1);
+        showHint(`Tap the ${pretty} tee location.`);
+        onceMapClick((ll) => dropTee(pretty, ll));
+        break;
+      }
+      case 'tee-other':
         showHint('Click the tee location, then enter the color.');
         onceMapClick((ll) => {
-          const color = prompt('Tee color (e.g. Azul, Verde, Rojo):', '');
+          const color = prompt('Tee color (e.g. Negro, Plata, Vino):', '');
           if (!color) return;
           dropTee(color, ll);
         });
@@ -852,6 +1034,7 @@
     showHint(hintText);
     activeDrawer = new L.Draw.Polygon(map, { shapeOptions: { color, fillColor: color, fillOpacity: 0.3, weight: 2 } });
     activeDrawer.enable();
+    showDrawingControls();
     map.once(L.Draw.Event.CREATED, (e) => {
       const latlngs = e.layer.getLatLngs()[0];
       onDone(latlngs);
@@ -863,6 +1046,7 @@
     showHint(hintText);
     activeDrawer = new L.Draw.Polyline(map, { shapeOptions: { color, weight: 3 } });
     activeDrawer.enable();
+    showDrawingControls();
     map.once(L.Draw.Event.CREATED, (e) => {
       const latlngs = e.layer.getLatLngs();
       onDone(latlngs);
