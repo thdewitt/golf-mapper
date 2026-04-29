@@ -159,8 +159,12 @@
           <span class="hint">Polygon or line for hazard shore</span>
         </button>
         <button class="tool-btn" data-tool="wash">
-          <b>Draw Wash / OB</b><br>
-          <span class="hint">Line across / along hole</span>
+          <b>Draw Wash</b><br>
+          <span class="hint">Trace the wash line. Tap the last point again to finish.</span>
+        </button>
+        <button class="tool-btn" data-tool="ob">
+          <b>Draw OB</b><br>
+          <span class="hint">Trace the OB line. Tap the last point again to finish.</span>
         </button>
         <!-- Quick-drop tee buttons. Pick a color, then tap once on the
              map. No prompt. The "Other..." button keeps the old
@@ -973,11 +977,17 @@
         askShape('Water', '#2563eb');
         break;
       case 'wash':
-        drawPolyline('#8b5e3c', 'Click to trace the line. Double-click to finish.', (pts) => {
-          const type = confirm('OK for OB, Cancel for Wash') ? 'OB' : 'Wash';
-          const name = prompt(`${type} name:`, type);
+        drawPolyline('#8b5e3c', 'Trace the wash. Tap the last point again to finish.', (pts) => {
+          const name = prompt('Wash name:', 'Wash');
           if (name === null) return;
-          addFeature(type, 'Line', name, pts);
+          addFeature('Wash', 'Line', name, pts);
+        });
+        break;
+      case 'ob':
+        drawPolyline('#dc2626', 'Trace the OB line. Tap the last point again to finish.', (pts) => {
+          const name = prompt('OB name:', 'OB');
+          if (name === null) return;
+          addFeature('OB', 'Line', name, pts);
         });
         break;
       case 'tee-rojo':
@@ -1045,12 +1055,20 @@
   function drawPolyline(color, hintText, onDone) {
     showHint(hintText);
     activeDrawer = new L.Draw.Polyline(map, { shapeOptions: { color, weight: 3 } });
-    // Patch leaflet-draw 1.0.4: stock _endPoint auto-finishes the polyline whenever
-    // a touch tap lands within 10px of the previous vertex (L.Browser.touch branch).
-    // On a zoomed-in satellite view that triggers after just 2-3 taps and ruins
-    // multi-point wash/OB tracing on iPhone. We drop that branch but keep normal
-    // vertex addition; double-tap-on-last-marker finishing flows through the marker
-    // click handler (not here), and the Finish Shape sidebar button still works.
+    // Patch leaflet-draw 1.0.4 polyline: on iPad/iPhone (Safari touch + Apple Pencil),
+    // its stock _endPoint calls _calculateFinishDistance and auto-finishes whenever
+    // a tap lands within 10px of the previous vertex (the `lastPtDistance < 10 &&
+    // L.Browser.touch` branch). On a zoomed satellite view that triggers after just
+    // 2-3 taps and aborts multi-point wash/OB tracing.
+    //
+    // We drop the touch auto-finish branch in _endPoint, AND defensively clamp
+    // _calculateFinishDistance to Infinity so no other internal call (tooltip,
+    // future leaflet-draw build) can decide we're "close enough" to auto-close.
+    // Intentional finishing still works: tapping the LAST vertex again fires
+    // _finishShape via the marker click handler bound by _updateFinishHandler
+    // (that path doesn't consult _calculateFinishDistance). The Finish Shape
+    // sidebar button is unaffected.
+    activeDrawer._calculateFinishDistance = function () { return Infinity; };
     activeDrawer._endPoint = function (clientX, clientY, e) {
       if (this._mouseDownOrigin) {
         const dragCheckDistance = L.point(clientX, clientY).distanceTo(this._mouseDownOrigin);
