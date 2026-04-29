@@ -41,7 +41,22 @@
   #save-btn:not(:disabled) b { color: #166534; }
   .tool-btn .hint { color: #6b7280; font-size: 11px; font-weight: normal; }
   .tool-btn.active .hint { color: rgba(255,255,255,0.8); }
+  #main { position: relative; }
   #map { flex: 1; background: #222; }
+
+  /* Big finish button that floats over the map while a polygon or polyline
+     is being drawn. The sidebar Finish Shape button is easy to miss on iPad,
+     and the "tap last vertex again" gesture is unreliable with Apple Pencil. */
+  #finish-overlay-btn {
+    position: absolute; top: 12px; right: 12px; z-index: 1000;
+    background: #22c55e; color: white; border: 0;
+    padding: 14px 22px; border-radius: 10px;
+    font-size: 17px; font-weight: 700; letter-spacing: 0.3px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.35); cursor: pointer;
+    display: none;
+  }
+  #finish-overlay-btn:hover { filter: brightness(1.08); }
+  #finish-overlay-btn:active { transform: scale(0.97); }
 
   /* Shrink Leaflet.draw's default vertex/edit handles. The defaults are
      chunky and make it hard to see the polygon you're tracing underneath.
@@ -217,6 +232,7 @@
       </section>
     </aside>
     <div id="map"></div>
+    <button id="finish-overlay-btn" type="button">Finish</button>
   </div>
   <div class="hint-bar" id="hint-bar"></div>
   <div class="drop-zone" id="drop-zone">Drop a .coursemap.json file to load</div>
@@ -920,6 +936,8 @@
     // Hide drawing controls when nothing's active.
     const dc = document.getElementById('drawing-controls');
     if (dc) dc.style.display = 'none';
+    const fob = document.getElementById('finish-overlay-btn');
+    if (fob) fob.style.display = 'none';
   }
 
   /// Make the Drawing section visible. Called when we kick off a polygon
@@ -927,6 +945,20 @@
   function showDrawingControls() {
     const dc = document.getElementById('drawing-controls');
     if (dc) dc.style.display = '';
+    const fob = document.getElementById('finish-overlay-btn');
+    if (fob) fob.style.display = '';
+  }
+
+  /// Finish the active polygon/polyline regardless of the touch time-gate.
+  /// Polylines expose `_explicitFinish` (the original _finishShape, bypassing
+  /// our synthetic-click guard); polygons fall back to completeShape.
+  function explicitFinishActiveDraw() {
+    if (!activeDrawer) return;
+    if (typeof activeDrawer._explicitFinish === 'function') {
+      activeDrawer._explicitFinish();
+    } else if (typeof activeDrawer.completeShape === 'function') {
+      activeDrawer.completeShape();
+    }
   }
 
   // Drawing-control button wiring. Always installed once at startup; the
@@ -936,12 +968,8 @@
       activeDrawer.deleteLastVertex();
     }
   };
-  document.getElementById('finish-shape-btn').onclick = () => {
-    if (activeDrawer && typeof activeDrawer.completeShape === 'function') {
-      // Polygon: needs at least 3 points. Polyline: needs at least 2.
-      activeDrawer.completeShape();
-    }
-  };
+  document.getElementById('finish-shape-btn').onclick = explicitFinishActiveDraw;
+  document.getElementById('finish-overlay-btn').onclick = explicitFinishActiveDraw;
   document.getElementById('cancel-tool-btn').onclick = () => cancelTool();
 
   function startTool(tool) {
@@ -1098,6 +1126,10 @@
       if (Date.now() - lastVertexAddedAt < 400) return;
       return origFinishShape();
     };
+    // Explicit-finish path that bypasses the time-gate, used by the
+    // Finish overlay/sidebar buttons. Tap-last-vertex still goes through
+    // the gated _finishShape.
+    activeDrawer._explicitFinish = origFinishShape;
     activeDrawer.enable();
     showDrawingControls();
     map.once(L.Draw.Event.CREATED, (e) => {
