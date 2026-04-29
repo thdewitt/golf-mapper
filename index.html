@@ -156,6 +156,10 @@
       </section>
       <section>
         <h2>Tools</h2>
+        <button class="tool-btn" id="finish-tool-btn" type="button" style="display:none; background:#22c55e; border-color:#16a34a; color:white;">
+          <b>Finish Drawing</b><br>
+          <span class="hint" style="color:rgba(255,255,255,0.9);">Save the line or polygon you're tracing</span>
+        </button>
         <button class="tool-btn" data-tool="fairway">
           <b>Draw Fairway</b><br>
           <span class="hint">Trace playable grass — desert course grass edges</span>
@@ -938,15 +942,22 @@
     if (dc) dc.style.display = 'none';
     const fob = document.getElementById('finish-overlay-btn');
     if (fob) fob.style.display = 'none';
+    const ftb = document.getElementById('finish-tool-btn');
+    if (ftb) ftb.style.display = 'none';
   }
 
   /// Make the Drawing section visible. Called when we kick off a polygon
   /// or polyline so the user has Undo / Finish / Cancel buttons handy.
+  /// Note: the overlay & in-tools Finish buttons set `display: none` via CSS
+  /// (overlay) or inline style (in-tools), so we MUST set an explicit value
+  /// here to show them — `display: ''` would just fall back to the CSS rule.
   function showDrawingControls() {
     const dc = document.getElementById('drawing-controls');
     if (dc) dc.style.display = '';
     const fob = document.getElementById('finish-overlay-btn');
-    if (fob) fob.style.display = '';
+    if (fob) fob.style.display = 'block';
+    const ftb = document.getElementById('finish-tool-btn');
+    if (ftb) ftb.style.display = 'block';
   }
 
   /// Finish the active polygon/polyline regardless of the touch time-gate.
@@ -970,6 +981,7 @@
   };
   document.getElementById('finish-shape-btn').onclick = explicitFinishActiveDraw;
   document.getElementById('finish-overlay-btn').onclick = explicitFinishActiveDraw;
+  document.getElementById('finish-tool-btn').onclick = explicitFinishActiveDraw;
   document.getElementById('cancel-tool-btn').onclick = () => cancelTool();
 
   function startTool(tool) {
