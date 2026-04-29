@@ -1055,19 +1055,24 @@
   function drawPolyline(color, hintText, onDone) {
     showHint(hintText);
     activeDrawer = new L.Draw.Polyline(map, { shapeOptions: { color, weight: 3 } });
-    // Patch leaflet-draw 1.0.4 polyline: on iPad/iPhone (Safari touch + Apple Pencil),
-    // its stock _endPoint calls _calculateFinishDistance and auto-finishes whenever
-    // a tap lands within 10px of the previous vertex (the `lastPtDistance < 10 &&
-    // L.Browser.touch` branch). On a zoomed satellite view that triggers after just
-    // 2-3 taps and aborts multi-point wash/OB tracing.
+    // Patch leaflet-draw 1.0.4 polyline to survive iPad/iPhone Safari + Apple Pencil:
     //
-    // We drop the touch auto-finish branch in _endPoint, AND defensively clamp
-    // _calculateFinishDistance to Infinity so no other internal call (tooltip,
-    // future leaflet-draw build) can decide we're "close enough" to auto-close.
-    // Intentional finishing still works: tapping the LAST vertex again fires
-    // _finishShape via the marker click handler bound by _updateFinishHandler
-    // (that path doesn't consult _calculateFinishDistance). The Finish Shape
-    // sidebar button is unaffected.
+    // 1. _endPoint touch branch: stock code auto-finishes when a tap lands within
+    //    10px of the previous vertex. Replaced with a version that drops that
+    //    branch so taps always add a vertex.
+    // 2. _calculateFinishDistance: clamped to Infinity defensively, so any internal
+    //    "close to a vertex?" check can never trip auto-close.
+    // 3. _finishShape time guard (the real iPad killer): when a vertex is added,
+    //    leaflet-draw's _updateFinishHandler binds a click handler on the
+    //    just-placed marker that calls _finishShape. The marker is created right
+    //    under the Pencil tip, so the synthetic `click` event that follows
+    //    `touchstart` hits that marker and finishes the line — even if the user
+    //    spaced their points wide apart. We block _finishShape for 400ms after
+    //    any addVertex; a deliberate second tap on the last vertex (after lifting
+    //    the Pencil and tapping again) is well past that window, so intentional
+    //    finishing still works. The Finish Shape sidebar button calls
+    //    completeShape -> _finishShape, so it's also gated by the 400ms window;
+    //    in practice the user can't reach the sidebar that fast, so it's fine.
     activeDrawer._calculateFinishDistance = function () { return Infinity; };
     activeDrawer._endPoint = function (clientX, clientY, e) {
       if (this._mouseDownOrigin) {
@@ -1081,6 +1086,17 @@
         this._enableNewMarkers();
       }
       this._mouseDownOrigin = null;
+    };
+    let lastVertexAddedAt = 0;
+    const origAddVertex = activeDrawer.addVertex.bind(activeDrawer);
+    activeDrawer.addVertex = function (latlng) {
+      lastVertexAddedAt = Date.now();
+      return origAddVertex(latlng);
+    };
+    const origFinishShape = activeDrawer._finishShape.bind(activeDrawer);
+    activeDrawer._finishShape = function () {
+      if (Date.now() - lastVertexAddedAt < 400) return;
+      return origFinishShape();
     };
     activeDrawer.enable();
     showDrawingControls();
