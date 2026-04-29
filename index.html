@@ -1045,6 +1045,25 @@
   function drawPolyline(color, hintText, onDone) {
     showHint(hintText);
     activeDrawer = new L.Draw.Polyline(map, { shapeOptions: { color, weight: 3 } });
+    // Patch leaflet-draw 1.0.4: stock _endPoint auto-finishes the polyline whenever
+    // a touch tap lands within 10px of the previous vertex (L.Browser.touch branch).
+    // On a zoomed-in satellite view that triggers after just 2-3 taps and ruins
+    // multi-point wash/OB tracing on iPhone. We drop that branch but keep normal
+    // vertex addition; double-tap-on-last-marker finishing flows through the marker
+    // click handler (not here), and the Finish Shape sidebar button still works.
+    activeDrawer._endPoint = function (clientX, clientY, e) {
+      if (this._mouseDownOrigin) {
+        const dragCheckDistance = L.point(clientX, clientY).distanceTo(this._mouseDownOrigin);
+        if (this.options.maxPoints > 1 && this.options.maxPoints == this._markers.length + 1) {
+          this.addVertex(e.latlng);
+          this._finishShape();
+        } else if (Math.abs(dragCheckDistance) < 9 * (window.devicePixelRatio || 1)) {
+          this.addVertex(e.latlng);
+        }
+        this._enableNewMarkers();
+      }
+      this._mouseDownOrigin = null;
+    };
     activeDrawer.enable();
     showDrawingControls();
     map.once(L.Draw.Event.CREATED, (e) => {
