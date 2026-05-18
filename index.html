@@ -20,6 +20,13 @@
   header button { background: #3b82f6; color: white; border: 0; padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; }
   header button.save { background: #22c55e; }
   header button:hover { filter: brightness(1.1); }
+  .place-search input {
+    padding: 7px 12px; border-radius: 6px; border: 1px solid #3a3d42;
+    background: #2a2c30; color: white; font-size: 13px; width: 320px;
+    outline: none;
+  }
+  .place-search input::placeholder { color: #6b7280; }
+  .place-search input:focus { border-color: #3b82f6; }
   #main { flex: 1; display: flex; min-height: 0; }
   aside { width: 260px; background: #f5f6f8; border-right: 1px solid #dee0e4; overflow-y: auto; }
   aside section { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
@@ -130,6 +137,11 @@
     <div>
       <h1 id="course-title">Course Mapper</h1>
       <span id="course-sub" class="muted">No course loaded</span>
+    </div>
+    <div class="place-search">
+      <input id="place-search-input" type="search"
+             placeholder="Go to place (e.g. Canyata Golf Course)"
+             autocomplete="off" autocorrect="off" autocapitalize="off" />
     </div>
     <!-- Off-screen rather than `hidden`: iOS Safari refuses to fire a
          programmatic .click() on a display:none file input, but it
@@ -595,6 +607,30 @@
     a.click();
     showStatus('Downloaded (no direct save support).');
   };
+
+  // Header place search: geocode via OpenStreetMap Nominatim (free, no API key,
+  // be polite about volume) and fly the map to the result. Enter to search.
+  document.getElementById('place-search-input').addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    const input = e.currentTarget;
+    const q = input.value.trim();
+    if (!q) return;
+    input.disabled = true;
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+      const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+      const results = await r.json();
+      if (!results.length) { showStatus(`No place found: "${q}"`); return; }
+      const lat = parseFloat(results[0].lat);
+      const lon = parseFloat(results[0].lon);
+      map.flyTo([lat, lon], 17, { duration: 0.8 });
+      showStatus(`Found: ${results[0].display_name}`);
+    } catch (err) {
+      showStatus('Search failed: ' + err.message);
+    } finally {
+      input.disabled = false;
+    }
+  });
 
   /// Brief overlay text so the user sees that a save happened.
   function showStatus(text) {
