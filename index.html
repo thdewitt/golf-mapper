@@ -1148,6 +1148,8 @@
     if (activeDrawer) { try { activeDrawer.disable(); } catch {} activeDrawer = null; }
     hideHint();
     activeTool = null;
+    // Re-enable map panning when drawing stops.
+    if (!map.dragging.enabled()) map.dragging.enable();
     // Hide drawing controls when nothing's active.
     const dc = document.getElementById('drawing-controls');
     if (dc) dc.style.display = 'none';
@@ -1163,6 +1165,12 @@
   /// (overlay) or inline style (in-tools), so we MUST set an explicit value
   /// here to show them — `display: ''` would just fall back to the CSS rule.
   function showDrawingControls() {
+    // Lock map panning while drawing. On iPad with Apple Pencil, every tap
+    // drifts a few pixels between touchstart and touchend; without this lock
+    // leaflet-draw adds a vertex at touchdown AND Leaflet pans the map under
+    // the user, which makes vertices appear in "random" places relative to
+    // the imagery. Pinch-to-zoom and two-finger rotate stay enabled.
+    if (map.dragging.enabled()) map.dragging.disable();
     const dc = document.getElementById('drawing-controls');
     if (dc) dc.style.display = '';
     const fob = document.getElementById('finish-overlay-btn');
