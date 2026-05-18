@@ -65,6 +65,22 @@
   #finish-overlay-btn:hover { filter: brightness(1.08); }
   #finish-overlay-btn:active { transform: scale(0.97); }
 
+  /* Cardinal-rotation buttons. Floats on the map under the Leaflet zoom
+     controls so it's reachable without the sidebar. */
+  #rotate-quick {
+    position: absolute; top: 96px; left: 12px; z-index: 1000;
+    display: flex; flex-direction: column; gap: 4px;
+    background: rgba(20,22,25,0.85); padding: 4px; border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  #rotate-quick button {
+    background: #fff; color: #1f2937; border: 0;
+    padding: 6px 10px; border-radius: 4px;
+    font-size: 12px; font-weight: 700; cursor: pointer; min-width: 56px;
+  }
+  #rotate-quick button.active { background: #3b82f6; color: white; }
+  #rotate-quick button:active { transform: scale(0.97); }
+
   /* Shrink Leaflet.draw's default vertex/edit handles. The defaults are
      chunky and make it hard to see the polygon you're tracing underneath.
      Sized to match the small midpoint markers on the existing line. */
@@ -253,6 +269,12 @@
     </aside>
     <div id="map"></div>
     <button id="finish-overlay-btn" type="button">Finish</button>
+    <div id="rotate-quick">
+      <button type="button" data-bearing="0" class="active">N up</button>
+      <button type="button" data-bearing="90">E up</button>
+      <button type="button" data-bearing="180">S up</button>
+      <button type="button" data-bearing="270">W up</button>
+    </div>
   </div>
   <div class="hint-bar" id="hint-bar"></div>
   <div class="drop-zone" id="drop-zone">Drop a .coursemap.json file to load</div>
@@ -305,16 +327,33 @@
   }
 
   // -------- Map --------
-  // rotate + touchRotate enable two-finger twist on iPad to rotate the map
-  // so the user can orient a hole however they want while mapping.
-  // rotateControl adds a small compass UI to spin/reset rotation by mouse.
+  // rotate enables map rotation; the user picks one of four cardinal
+  // bearings (N/E/S/W up) via the floating buttons defined below.
+  // touchRotate stays on so two-finger twist on iPad still works if needed;
+  // rotateControl (freeform compass) is off — the four buttons replace it.
   const map = L.map('map', {
     zoomControl: true,
     rotate: true,
     touchRotate: true,
-    rotateControl: { closeOnZeroBearing: false, position: 'topleft' },
+    rotateControl: false,
     bearing: 0,
   }).setView([32.445, -111.12], 17); // Marana AZ default
+
+  // Cardinal rotation: snap the map to N/E/S/W up. Using the camera-bearing
+  // convention where setBearing(deg) puts that compass direction at the top
+  // of the screen. If a button labels wrong (e.g. tapping E shows W up),
+  // just flip the mapping: N stays 0, swap E<->W, S stays 180.
+  const cardinalToBearing = { 'N': 0, 'E': 90, 'S': 180, 'W': 270 };
+  document.querySelectorAll('#rotate-quick button').forEach(btn => {
+    btn.onclick = () => {
+      const label = btn.textContent.charAt(0); // 'N','E','S','W'
+      const bearing = cardinalToBearing[label] ?? 0;
+      if (typeof map.setBearing === 'function') map.setBearing(bearing);
+      document.querySelectorAll('#rotate-quick button')
+        .forEach(b => b.classList.toggle('active', b === btn));
+    };
+  });
+
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Imagery &copy; Esri',
     maxZoom: 22,
