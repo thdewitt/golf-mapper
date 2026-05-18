@@ -608,8 +608,44 @@
     showStatus('Downloaded (no direct save support).');
   };
 
-  // Header place search: geocode via OpenStreetMap Nominatim (free, no API key,
-  // be polite about volume) and fly the map to the result. Enter to search.
+  // Header place search. Tries, in order:
+  //   1. "lat, lng" coords pasted directly (also accepts trailing N/S/E/W).
+  //   2. OpenStreetMap Nominatim (free, no key) — good for cities + named POIs.
+  //   3. ArcGIS World Geocoding (no key for low volume, same vendor as our
+  //      map tiles) — much better at US rural street addresses like
+  //      "18240 E 2150th Rd, Marshall, IL".
+  // Enter submits.
+  function parseLatLng(s) {
+    // Accept "39.376, -87.661", "39.376 -87.661", "39.376N 87.661W", etc.
+    const cleaned = s.replace(/[°,]+/g, ' ').trim();
+    const m = cleaned.match(/^(-?\d+(?:\.\d+)?)\s*([NS])?\s+(-?\d+(?:\.\d+)?)\s*([EW])?$/i);
+    if (!m) return null;
+    let lat = parseFloat(m[1]); let lng = parseFloat(m[3]);
+    if (m[2] && m[2].toUpperCase() === 'S') lat = -Math.abs(lat);
+    if (m[4] && m[4].toUpperCase() === 'W') lng = -Math.abs(lng);
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    return { lat, lng, label: `${lat.toFixed(5)}, ${lng.toFixed(5)}` };
+  }
+  async function geocodeNominatim(q) {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+    const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    const results = await r.json();
+    if (!results.length) return null;
+    return {
+      lat: parseFloat(results[0].lat),
+      lng: parseFloat(results[0].lon),
+      label: results[0].display_name,
+    };
+  }
+  async function geocodeArcgis(q) {
+    const url = `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates`
+      + `?f=json&maxLocations=1&outFields=Match_addr&singleLine=${encodeURIComponent(q)}`;
+    const r = await fetch(url);
+    const data = await r.json();
+    const c = data && data.candidates && data.candidates[0];
+    if (!c || !c.location) return null;
+    return { lat: c.location.y, lng: c.location.x, label: c.address || q };
+  }
   document.getElementById('place-search-input').addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
     const input = e.currentTarget;
@@ -617,14 +653,12 @@
     if (!q) return;
     input.disabled = true;
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
-      const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-      const results = await r.json();
-      if (!results.length) { showStatus(`No place found: "${q}"`); return; }
-      const lat = parseFloat(results[0].lat);
-      const lon = parseFloat(results[0].lon);
-      map.flyTo([lat, lon], 17, { duration: 0.8 });
-      showStatus(`Found: ${results[0].display_name}`);
+      let hit = parseLatLng(q);
+      if (!hit) hit = await geocodeNominatim(q);
+      if (!hit) hit = await geocodeArcgis(q);
+      if (!hit) { showStatus(`No place found: "${q}"`); return; }
+      map.flyTo([hit.lat, hit.lng], 17, { duration: 0.8 });
+      showStatus(`Found: ${hit.label}`);
     } catch (err) {
       showStatus('Search failed: ' + err.message);
     } finally {
