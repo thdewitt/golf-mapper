@@ -464,6 +464,42 @@
     return lateral >= 0 ? 'Right' : 'Left';
   }
 
+  /// After the user traces a green polygon, auto-fill the green's center
+  /// (always) and front/back (only when a fairway has been drawn — we need
+  /// the fairway-centroid -> green-centroid vector as the approach axis to
+  /// know which side of the green is "front"). For front/back we pick the
+  /// perimeter vertex with the most negative / positive projection onto the
+  /// approach axis; that's close enough for distance display since user-
+  /// traced greens have plenty of vertices.
+  function autoSetGreenCenterFrontBack(hole, greenObj) {
+    if (!greenObj || !greenObj.perimeter || greenObj.perimeter.length < 3) return;
+    const center = centroidOf(greenObj.perimeter);
+    if (!center) return;
+    greenObj.center = center;
+
+    const fairway = hole.fairwayPerimeter;
+    if (!fairway || fairway.length < 3) return; // leave front/back unset
+    const fwCenter = centroidOf(fairway);
+    if (!fwCenter) return;
+
+    const approach = localOffsetMeters(fwCenter, center); // ball travels this way
+    const approachLen = Math.hypot(approach.east, approach.north);
+    if (approachLen < 0.5) return; // green sits on top of fairway centroid; bail
+    const ax = approach.east / approachLen;
+    const ay = approach.north / approachLen;
+
+    let frontPt = null, backPt = null;
+    let minProj = Infinity, maxProj = -Infinity;
+    for (const p of greenObj.perimeter) {
+      const off = localOffsetMeters(center, p);
+      const proj = off.east * ax + off.north * ay; // <0 = toward fairway, >0 = away
+      if (proj < minProj) { minProj = proj; frontPt = p; }
+      if (proj > maxProj) { maxProj = proj; backPt  = p; }
+    }
+    if (frontPt) greenObj.front = { latitude: frontPt.latitude, longitude: frontPt.longitude };
+    if (backPt)  greenObj.back  = { latitude: backPt.latitude,  longitude: backPt.longitude  };
+  }
+
   /// Build an auto-name for a bunker on the current hole, e.g. "FB #2 Right"
   /// or "GB #1 Front". Uses tee + green-center to determine play direction;
   /// falls back to a plain "Bunker N" if those aren't drawn yet.
@@ -1172,7 +1208,15 @@
         const tint = greenTint(currentGreenIdx);
         const tag = currentGreenIdx > 0 ? ` ${(allGreens(hole)[currentGreenIdx].label) || greenLetter(currentGreenIdx)}` : '';
         drawPolygon(tint, `Click to trace green${tag}. Double-click to finish.`, (pts) => {
-          activeGreen(course.holes[currentHoleIdx]).perimeter = pts.map(latlngToMapPoint);
+          const greenObj = activeGreen(course.holes[currentHoleIdx]);
+          greenObj.perimeter = pts.map(latlngToMapPoint);
+          // Compute center (and front/back if a fairway is drawn) automatically.
+          autoSetGreenCenterFrontBack(course.holes[currentHoleIdx], greenObj);
+          if (!hole.fairwayPerimeter || hole.fairwayPerimeter.length < 3) {
+            showStatus('Green center set. Draw the fairway first for auto front/back.');
+          } else {
+            showStatus('Green center, front, and back auto-detected.');
+          }
           renderHole(); renderHoleGrid(); updateHoleSummary();
         });
         break;
