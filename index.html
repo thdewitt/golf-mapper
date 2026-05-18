@@ -220,6 +220,15 @@
         <!-- Quick-drop tee buttons. Pick a color, then tap once on the
              map. No prompt. The "Other..." button keeps the old
              type-in-color flow for unusual tees. -->
+        <button class="tool-btn" data-tool="tee-i">
+          <b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#000;border:1px solid #fff;vertical-align:middle;margin-right:6px;"></span>Drop I Tee</b>
+        </button>
+        <button class="tool-btn" data-tool="tee-ii">
+          <b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;border:1px solid #fff;vertical-align:middle;margin-right:6px;"></span>Drop II Tee</b>
+        </button>
+        <button class="tool-btn" data-tool="tee-iii">
+          <b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;border:1px solid #fff;vertical-align:middle;margin-right:6px;"></span>Drop III Tee</b>
+        </button>
         <button class="tool-btn" data-tool="tee-rojo">
           <b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;border:1px solid #fff;vertical-align:middle;margin-right:6px;"></span>Drop Rojo Tee</b>
         </button>
@@ -485,13 +494,21 @@
 
   function teeColorHex(color) {
     const c = (color || '').toLowerCase();
-    if (c === 'black') return '#000';
-    if (c.includes('blue') || c === 'azul') return '#3b82f6';
+    if (c === 'black' || c === 'i')   return '#000';
+    if (c.includes('blue') || c === 'azul' || c === 'ii') return '#3b82f6';
     if (c.includes('white') || c === 'blanco') return '#f3f4f6';
     if (c === 'gold' || c === 'yellow' || c === 'dorado') return '#fbbf24';
     if (c === 'green' || c === 'verde') return '#22c55e';
-    if (c === 'red' || c === 'rojo') return '#ef4444';
+    if (c === 'red' || c === 'rojo' || c === 'iii') return '#ef4444';
     return '#6366f1';
+  }
+
+  /// Tee marker label: short codes like Roman numerals ("I", "II", "III")
+  /// fit fully inside the 26px badge; longer color names ("Rojo", "Black")
+  /// collapse to just the initial so the badge stays readable.
+  function teeLabel(color) {
+    const c = color || '?';
+    return c.length <= 3 ? c.toUpperCase() : c.charAt(0).toUpperCase();
   }
 
   function featureColorHex(type) {
@@ -895,7 +912,7 @@
       const p = tee.center || tee.backCenter;
       if (p) {
         const m = L.marker([p.latitude, p.longitude], {
-          icon: divIcon(teeColorHex(tee.color), (tee.color || '?').charAt(0).toUpperCase()),
+          icon: divIcon(teeColorHex(tee.color), teeLabel(tee.color)),
         }).bindTooltip(`${tee.color} tee`);
         m.addTo(layers.tees);
         bounds.push([p.latitude, p.longitude]);
@@ -1188,10 +1205,16 @@
       case 'tee-rojo':
       case 'tee-verde':
       case 'tee-azul':
-      case 'tee-dorado': {
-        // Color is encoded in the tool id — capitalize for the tee record.
-        const color = tool.split('-')[1];
-        const pretty = color.charAt(0).toUpperCase() + color.slice(1);
+      case 'tee-dorado':
+      case 'tee-i':
+      case 'tee-ii':
+      case 'tee-iii': {
+        // Color is encoded in the tool id. Roman-numeral tees (i/ii/iii)
+        // stay fully uppercased; named colors get title-case.
+        const raw = tool.split('-')[1];
+        const isRoman = /^i{1,3}$/.test(raw);
+        const pretty = isRoman ? raw.toUpperCase()
+                               : raw.charAt(0).toUpperCase() + raw.slice(1);
         showHint(`Tap the ${pretty} tee location.`);
         onceMapClick((ll) => dropTee(pretty, ll));
         break;
