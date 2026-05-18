@@ -68,6 +68,18 @@
   #finish-overlay-btn:hover { filter: brightness(1.08); }
   #finish-overlay-btn:active { transform: scale(0.97); }
 
+  /* Map lock toggle. Always visible. Tap to disable map gestures so
+     Pencil taps don't drift the map. Tap again to re-enable panning. */
+  #lock-map-btn {
+    position: absolute; top: 12px; right: 110px; z-index: 1000;
+    background: #6b7280; color: white; border: 0;
+    padding: 12px 16px; border-radius: 10px;
+    font-size: 14px; font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: pointer;
+  }
+  #lock-map-btn.locked { background: #dc2626; }
+  #lock-map-btn:active { transform: scale(0.97); }
+
   /* Cardinal-rotation buttons. Anchored to the top-right of the map; sits
      below where the Finish overlay button appears when drawing. */
   #rotate-quick {
@@ -281,6 +293,7 @@
     </aside>
     <div id="map"></div>
     <button id="finish-overlay-btn" type="button">Finish</button>
+    <button id="lock-map-btn" type="button">Lock Map</button>
     <div id="rotate-quick">
       <button type="button" data-bearing="0" class="active">N up</button>
       <button type="button" data-bearing="90">E up</button>
@@ -1148,8 +1161,6 @@
     if (activeDrawer) { try { activeDrawer.disable(); } catch {} activeDrawer = null; }
     hideHint();
     activeTool = null;
-    // Re-enable every map gesture handler that drawing disabled.
-    setMapGestures(true);
     // Hide drawing controls when nothing's active.
     const dc = document.getElementById('drawing-controls');
     if (dc) dc.style.display = 'none';
@@ -1157,15 +1168,17 @@
     if (fob) fob.style.display = 'none';
     const ftb = document.getElementById('finish-tool-btn');
     if (ftb) ftb.style.display = 'none';
+    // NOTE: the map-lock toggle is independent of drawing state. It's only
+    // changed by the user pressing the Lock Map button — never by tool
+    // start/end. That way the user can lock once and tap many vertices
+    // without re-locking after each tool finish.
   }
 
-  /// Toggle every map gesture handler that can move/zoom/rotate the map
-  /// underneath the user's Pencil during a draw. On iPad, a palm resting
-  /// on the screen + the Pencil tip = TWO touches, which fires Leaflet's
-  /// pinch-zoom and the rotate plugin's two-finger twist — both translate
-  /// the map. Disabling dragging alone isn't enough; we also turn off
-  /// touchZoom, doubleClickZoom, scrollWheelZoom, and touchRotate, then
-  /// re-enable them all when the user finishes/cancels.
+  /// Enable or disable every map gesture handler in one shot. We use this
+  /// for the explicit user-controlled Lock Map toggle, NOT around drawing
+  /// (that locked them out of panning to the next vertex). The handlers we
+  /// walk include the rotate plugin's, so locking also stops palm+Pencil
+  /// from triggering pinch/rotate jumps.
   function setMapGestures(on) {
     const handlers = ['dragging', 'touchZoom', 'doubleClickZoom',
                       'scrollWheelZoom', 'boxZoom', 'keyboard', 'tap',
@@ -1184,8 +1197,6 @@
   /// (overlay) or inline style (in-tools), so we MUST set an explicit value
   /// here to show them — `display: ''` would just fall back to the CSS rule.
   function showDrawingControls() {
-    // Lock all map gestures while drawing. See setMapGestures comment.
-    setMapGestures(false);
     const dc = document.getElementById('drawing-controls');
     if (dc) dc.style.display = '';
     const fob = document.getElementById('finish-overlay-btn');
@@ -1193,6 +1204,21 @@
     const ftb = document.getElementById('finish-tool-btn');
     if (ftb) ftb.style.display = 'block';
   }
+
+  // User-controlled map lock. When ON, all gesture handlers are off and
+  // Pencil taps land precisely without the map drifting. When OFF, the user
+  // can pan/zoom/rotate normally. Toggled via the Lock Map button.
+  let mapLocked = false;
+  function setMapLocked(locked) {
+    mapLocked = locked;
+    setMapGestures(!locked);
+    const btn = document.getElementById('lock-map-btn');
+    if (btn) {
+      btn.classList.toggle('locked', locked);
+      btn.textContent = locked ? 'Map Locked — tap to unlock' : 'Lock Map';
+    }
+  }
+  document.getElementById('lock-map-btn').onclick = () => setMapLocked(!mapLocked);
 
   /// Finish the active polygon/polyline regardless of the touch time-gate.
   /// Polylines expose `_explicitFinish` (the original _finishShape, bypassing
