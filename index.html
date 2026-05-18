@@ -153,6 +153,10 @@
     <aside>
       <section>
         <h2>Course</h2>
+        <button class="tool-btn" id="new-btn" title="Start a blank course">
+          <b>New Course</b><br>
+          <span class="hint">Start a blank 18-hole course you can map from scratch</span>
+        </button>
         <button class="tool-btn" id="load-btn" title="Open a course JSON file">
           <b>Load JSON</b><br>
           <span class="hint">Open an existing course file</span>
@@ -556,6 +560,38 @@
     };
     reader.readAsText(file);
   }
+
+  // Bootstrap a blank course in memory so the user can start mapping without
+  // an existing JSON file. Save JSON later to write it out.
+  document.getElementById('new-btn').onclick = () => {
+    if (course && !confirm('Discard the current course and start a new blank one?')) return;
+    const clubName = (prompt('Club name:', 'Canyata Golf Club') || '').trim();
+    if (!clubName) return;
+    const courseName = (prompt('Course name (e.g. Main, Saguaro/Wild Burro):', 'Main') || '').trim();
+    if (!courseName) return;
+    const holeCountRaw = prompt('Number of holes:', '18');
+    const holeCount = Math.max(1, Math.min(36, parseInt(holeCountRaw, 10) || 18));
+    fileHandle = null; // any prior FSA handle no longer applies
+    course = {
+      clubName,
+      courseName,
+      createdAt: isoNow(),
+      updatedAt: isoNow(),
+      holes: Array.from({ length: holeCount }, (_, i) => ({
+        number: i + 1,
+        teeBoxes: [],
+        features: [],
+        green: { perimeter: [] },
+      })),
+    };
+    currentHoleIdx = 0;
+    document.getElementById('course-title').textContent = `${course.clubName} — ${course.courseName}`;
+    document.getElementById('course-sub').textContent = `${course.holes.length} holes`;
+    document.getElementById('save-btn').disabled = false;
+    renderHoleGrid();
+    selectHole(0);
+    showStatus(`New course: ${clubName} — ${courseName} (${holeCount} holes)`);
+  };
 
   document.getElementById('save-btn').onclick = async () => {
     if (!course) return;
