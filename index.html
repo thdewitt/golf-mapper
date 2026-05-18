@@ -1148,8 +1148,8 @@
     if (activeDrawer) { try { activeDrawer.disable(); } catch {} activeDrawer = null; }
     hideHint();
     activeTool = null;
-    // Re-enable map panning when drawing stops.
-    if (!map.dragging.enabled()) map.dragging.enable();
+    // Re-enable every map gesture handler that drawing disabled.
+    setMapGestures(true);
     // Hide drawing controls when nothing's active.
     const dc = document.getElementById('drawing-controls');
     if (dc) dc.style.display = 'none';
@@ -1159,18 +1159,33 @@
     if (ftb) ftb.style.display = 'none';
   }
 
+  /// Toggle every map gesture handler that can move/zoom/rotate the map
+  /// underneath the user's Pencil during a draw. On iPad, a palm resting
+  /// on the screen + the Pencil tip = TWO touches, which fires Leaflet's
+  /// pinch-zoom and the rotate plugin's two-finger twist — both translate
+  /// the map. Disabling dragging alone isn't enough; we also turn off
+  /// touchZoom, doubleClickZoom, scrollWheelZoom, and touchRotate, then
+  /// re-enable them all when the user finishes/cancels.
+  function setMapGestures(on) {
+    const handlers = ['dragging', 'touchZoom', 'doubleClickZoom',
+                      'scrollWheelZoom', 'boxZoom', 'keyboard', 'tap',
+                      'touchRotate', 'shiftKeyRotate'];
+    for (const h of handlers) {
+      const handler = map[h];
+      if (handler && typeof handler.enable === 'function' && typeof handler.disable === 'function') {
+        on ? handler.enable() : handler.disable();
+      }
+    }
+  }
+
   /// Make the Drawing section visible. Called when we kick off a polygon
   /// or polyline so the user has Undo / Finish / Cancel buttons handy.
   /// Note: the overlay & in-tools Finish buttons set `display: none` via CSS
   /// (overlay) or inline style (in-tools), so we MUST set an explicit value
   /// here to show them — `display: ''` would just fall back to the CSS rule.
   function showDrawingControls() {
-    // Lock map panning while drawing. On iPad with Apple Pencil, every tap
-    // drifts a few pixels between touchstart and touchend; without this lock
-    // leaflet-draw adds a vertex at touchdown AND Leaflet pans the map under
-    // the user, which makes vertices appear in "random" places relative to
-    // the imagery. Pinch-to-zoom and two-finger rotate stay enabled.
-    if (map.dragging.enabled()) map.dragging.disable();
+    // Lock all map gestures while drawing. See setMapGestures comment.
+    setMapGestures(false);
     const dc = document.getElementById('drawing-controls');
     if (dc) dc.style.display = '';
     const fob = document.getElementById('finish-overlay-btn');
