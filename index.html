@@ -52,7 +52,16 @@
      is computed from current GPS). Re-enable by deleting this rule. */
   .tool-btn[data-tool^="tee-"] { display: none; }
   #main { position: relative; }
-  #map { flex: 1; background: #222; }
+  /* touch-action: none disables iPadOS Safari's default touch handling
+     (browser-level pinch/pan/scroll/Scribble interception) so Pencil
+     taps land cleanly. -webkit-touch-callout: none kills the long-press
+     callout that fires on Pencil hold. */
+  #map {
+    flex: 1; background: #222;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+  }
 
   /* Big finish button that floats over the map while a polygon or polyline
      is being drawn. The sidebar Finish Shape button is easy to miss on iPad,
@@ -362,6 +371,14 @@
     touchRotate: true,
     rotateControl: false,
     bearing: 0,
+    // iPadOS Safari fires phantom click/tap events for Apple Pencil through
+    // Leaflet's "tap" handler (the touch-to-mouse translator). Disabling it
+    // makes Leaflet read touch events directly from leaflet-draw without
+    // synthesizing extra clicks that pan or jump the view.
+    tap: false,
+    // No momentum panning after a touch lifts — even with dragging disabled
+    // a transient drag can otherwise leave the map still moving.
+    inertia: false,
   }).setView([32.445, -111.12], 17); // Marana AZ default
 
   // Cardinal rotation: snap the map to N/E/S/W up. Using the camera-bearing
@@ -1174,19 +1191,22 @@
     // without re-locking after each tool finish.
   }
 
-  /// Enable or disable every map gesture handler in one shot. We use this
-  /// for the explicit user-controlled Lock Map toggle, NOT around drawing
-  /// (that locked them out of panning to the next vertex). The handlers we
-  /// walk include the rotate plugin's, so locking also stops palm+Pencil
-  /// from triggering pinch/rotate jumps.
+  /// Enable or disable every map gesture handler in one shot. We walk
+  /// map._handlers so plugin-added handlers (leaflet-rotate's touchRotate,
+  /// shiftKeyRotate) get toggled too, even if they're not on the map by
+  /// canonical name. Used by the Lock Map toggle.
   function setMapGestures(on) {
-    const handlers = ['dragging', 'touchZoom', 'doubleClickZoom',
-                      'scrollWheelZoom', 'boxZoom', 'keyboard', 'tap',
-                      'touchRotate', 'shiftKeyRotate'];
-    for (const h of handlers) {
-      const handler = map[h];
-      if (handler && typeof handler.enable === 'function' && typeof handler.disable === 'function') {
-        on ? handler.enable() : handler.disable();
+    const seen = new Set();
+    const candidates = [
+      ...(Array.isArray(map._handlers) ? map._handlers : []),
+      map.dragging, map.touchZoom, map.doubleClickZoom, map.scrollWheelZoom,
+      map.boxZoom, map.keyboard, map.tap, map.touchRotate, map.shiftKeyRotate,
+    ];
+    for (const h of candidates) {
+      if (!h || seen.has(h)) continue;
+      seen.add(h);
+      if (typeof h.enable === 'function' && typeof h.disable === 'function') {
+        on ? h.enable() : h.disable();
       }
     }
   }
@@ -1219,6 +1239,27 @@
     }
   }
   document.getElementById('lock-map-btn').onclick = () => setMapLocked(!mapLocked);
+
+  // Per user request: while a draw tool is active but the map is UNLOCKED,
+  // suppress vertex placement entirely. Forces the workflow "lock to place
+  // points, unlock to pan." Capture-phase listener at window level so we
+  // intercept before any Leaflet handler. Touches outside the map container
+  // (sidebar buttons, etc.) still flow through normally.
+  function shouldSuppressMapTouch(target) {
+    if (!activeDrawer || mapLocked) return false;
+    const mapEl = map.getContainer();
+    return mapEl && mapEl.contains(target);
+  }
+  ['touchstart', 'touchmove', 'touchend', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click']
+    .forEach(evt => {
+      window.addEventListener(evt, (e) => {
+        if (shouldSuppressMapTouch(e.target)) {
+          e.stopImmediatePropagation();
+          // preventDefault for non-passive events only.
+          if (e.cancelable) e.preventDefault();
+        }
+      }, { capture: true, passive: false });
+    });
 
   /// Finish the active polygon/polyline regardless of the touch time-gate.
   /// Polylines expose `_explicitFinish` (the original _finishShape, bypassing
