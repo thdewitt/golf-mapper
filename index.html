@@ -259,6 +259,7 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script>
   // -------- State --------
@@ -304,7 +305,16 @@
   }
 
   // -------- Map --------
-  const map = L.map('map', { zoomControl: true }).setView([32.445, -111.12], 17); // Marana AZ default
+  // rotate + touchRotate enable two-finger twist on iPad to rotate the map
+  // so the user can orient a hole however they want while mapping.
+  // rotateControl adds a small compass UI to spin/reset rotation by mouse.
+  const map = L.map('map', {
+    zoomControl: true,
+    rotate: true,
+    touchRotate: true,
+    rotateControl: { closeOnZeroBearing: false, position: 'topleft' },
+    bearing: 0,
+  }).setView([32.445, -111.12], 17); // Marana AZ default
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Imagery &copy; Esri',
     maxZoom: 22,
@@ -1294,6 +1304,30 @@
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') cancelTool();
   });
+
+  // ?course=URL on the page URL: auto-fetch and load that course JSON. Lets
+  // us share deeplinks like `?course=courses/canyata.coursemap.json`.
+  (async () => {
+    const urlParam = new URLSearchParams(window.location.search).get('course');
+    if (!urlParam) return;
+    try {
+      const r = await fetch(urlParam);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      let data = await r.json();
+      if (Array.isArray(data)) data = data[0];
+      if (!data || !data.holes) throw new Error('not a CourseMap JSON');
+      course = data;
+      currentHoleIdx = 0;
+      document.getElementById('course-title').textContent = `${course.clubName} — ${course.courseName}`;
+      document.getElementById('course-sub').textContent = `${course.holes.length} holes`;
+      document.getElementById('save-btn').disabled = false;
+      renderHoleGrid();
+      selectHole(0);
+      showStatus(`Loaded: ${course.clubName} — ${course.courseName}`);
+    } catch (err) {
+      showStatus(`Could not load course: ${err.message}`);
+    }
+  })();
 </script>
 </body>
 </html>
