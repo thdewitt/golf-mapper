@@ -1240,26 +1240,29 @@
   }
   document.getElementById('lock-map-btn').onclick = () => setMapLocked(!mapLocked);
 
-  // Per user request: while a draw tool is active but the map is UNLOCKED,
-  // suppress vertex placement entirely. Forces the workflow "lock to place
-  // points, unlock to pan." Capture-phase listener at window level so we
-  // intercept before any Leaflet handler. Touches outside the map container
-  // (sidebar buttons, etc.) still flow through normally.
-  function shouldSuppressMapTouch(target) {
-    if (!activeDrawer || mapLocked) return false;
-    const mapEl = map.getContainer();
-    return mapEl && mapEl.contains(target);
+  // Gate vertex placement on lock state — but at the leaflet-draw layer,
+  // not at the window-event layer. Earlier we suppressed ALL touch/pointer
+  // events on the map while unlocked-and-drawing, which also blocked pan.
+  // Instead, override _onTouch and _onMouseUp on the active drawer so
+  // taps don't add a vertex when unlocked, while Leaflet's drag handlers
+  // still receive events normally and panning works as expected.
+  function attachLockGate(drawer) {
+    if (!drawer) return;
+    const origOnTouch = drawer._onTouch ? drawer._onTouch.bind(drawer) : null;
+    const origOnMouseUp = drawer._onMouseUp ? drawer._onMouseUp.bind(drawer) : null;
+    if (origOnTouch) {
+      drawer._onTouch = function (e) {
+        if (!mapLocked) return; // unlocked = no vertex, but pan still works
+        return origOnTouch(e);
+      };
+    }
+    if (origOnMouseUp) {
+      drawer._onMouseUp = function (e) {
+        if (!mapLocked) return;
+        return origOnMouseUp(e);
+      };
+    }
   }
-  ['touchstart', 'touchmove', 'touchend', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click']
-    .forEach(evt => {
-      window.addEventListener(evt, (e) => {
-        if (shouldSuppressMapTouch(e.target)) {
-          e.stopImmediatePropagation();
-          // preventDefault for non-passive events only.
-          if (e.cancelable) e.preventDefault();
-        }
-      }, { capture: true, passive: false });
-    });
 
   /// Finish the active polygon/polyline regardless of the touch time-gate.
   /// Polylines expose `_explicitFinish` (the original _finishShape, bypassing
@@ -1398,6 +1401,7 @@
   function drawPolygon(color, hintText, onDone) {
     showHint(hintText);
     activeDrawer = new L.Draw.Polygon(map, { shapeOptions: { color, fillColor: color, fillOpacity: 0.3, weight: 2 } });
+    attachLockGate(activeDrawer);
     activeDrawer.enable();
     showDrawingControls();
     map.once(L.Draw.Event.CREATED, (e) => {
@@ -1410,6 +1414,7 @@
   function drawPolyline(color, hintText, onDone) {
     showHint(hintText);
     activeDrawer = new L.Draw.Polyline(map, { shapeOptions: { color, weight: 3 } });
+    attachLockGate(activeDrawer);
     // Patch leaflet-draw 1.0.4 polyline to survive iPad/iPhone Safari + Apple Pencil:
     //
     // 1. _endPoint touch branch: stock code auto-finishes when a tap lands within
