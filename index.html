@@ -757,9 +757,28 @@
     showStatus(`New course: ${clubName} — ${courseName} (${holeCount} holes)`);
   };
 
+  /// Walk the course and ensure every {latitude, longitude} object also
+  /// carries accuracy/sampleCount/capturedAt/source — older auto-detected
+  /// greens were stored as bare lat/lng and the scoring app rejects the
+  /// file as "could not parse as a coursemap" if any MapPoint is partial.
+  /// Run on every save for defense in depth.
+  function normalizeMapPoints(value) {
+    if (Array.isArray(value)) return value.map(normalizeMapPoints);
+    if (value && typeof value === 'object') {
+      if (typeof value.latitude === 'number' && typeof value.longitude === 'number') {
+        return asMapPoint(value);
+      }
+      const out = {};
+      for (const k of Object.keys(value)) out[k] = normalizeMapPoints(value[k]);
+      return out;
+    }
+    return value;
+  }
+
   document.getElementById('save-btn').onclick = async () => {
     if (!course) return;
     course.updatedAt = isoNow();
+    course = normalizeMapPoints(course);
     const json = JSON.stringify(course, null, 2);
 
     // Path 1: we have a handle from the Load picker — overwrite in place.
