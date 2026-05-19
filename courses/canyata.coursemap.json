@@ -1,35 +1,262 @@
 {
+  "id": "49440424-D6D8-40A8-8B11-0109F1B286B6",
   "clubName": "Canyata Golf Club",
   "courseName": "Canyata",
-  "address": "18240 E 2150th Rd, Marshall, IL 62441",
-  "designer": "Michael Benkusky",
-  "yearOpened": 2004,
-  "totalPar": 72,
-  "tees": [
-    { "name": "I",   "totalYards": 7014 },
-    { "name": "II",  "totalYards": 6474 },
-    { "name": "III", "totalYards": 6006 }
-  ],
   "createdAt": "2026-05-18T00:00:00.000Z",
   "updatedAt": "2026-05-18T00:00:00.000Z",
+  "teeColorsUsed": [],
   "holes": [
-    { "number": 1,  "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 2,  "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 3,  "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 4,  "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 5,  "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 6,  "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 7,  "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 8,  "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 9,  "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 10, "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 11, "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 12, "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 13, "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 14, "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 15, "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 16, "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 17, "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } },
-    { "number": 18, "teeBoxes": [{"color":"I"},{"color":"II"},{"color":"III"}], "features": [], "green": { "perimeter": [] } }
+    {
+      "id": "A4FB03AA-9CC2-4B41-A61C-9998AC422349",
+      "number": 1,
+      "par": 4,
+      "strokeIndex": 1,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "C0A1ABE7-59DF-4D78-B352-A5B222EB3D96",
+      "number": 2,
+      "par": 4,
+      "strokeIndex": 2,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "FCFCE958-D85C-4614-880F-A9B91D05B3C4",
+      "number": 3,
+      "par": 3,
+      "strokeIndex": 3,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "DF622545-02E8-45CD-B860-E9A7E2671FA9",
+      "number": 4,
+      "par": 4,
+      "strokeIndex": 4,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "DB0B6D1A-8789-41CC-B51C-15803C79449E",
+      "number": 5,
+      "par": 5,
+      "strokeIndex": 5,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "242066A7-A2E2-440D-878C-FD9A66B0975D",
+      "number": 6,
+      "par": 4,
+      "strokeIndex": 6,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "59E9FC55-F06E-409B-B52D-1EAFFCDF716D",
+      "number": 7,
+      "par": 3,
+      "strokeIndex": 7,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "160DA360-98AC-40A8-BD80-BC991277F186",
+      "number": 8,
+      "par": 4,
+      "strokeIndex": 8,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "7DB2B4C4-8C4E-4842-96E9-762D8804F6AC",
+      "number": 9,
+      "par": 5,
+      "strokeIndex": 9,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "64DCE5FA-75B2-4697-9A50-4A6D18A8BFBA",
+      "number": 10,
+      "par": 4,
+      "strokeIndex": 10,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "59802B49-2580-44F5-A280-7269DE1BEF9D",
+      "number": 11,
+      "par": 4,
+      "strokeIndex": 11,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "E8BA8F20-8596-40B2-8157-7C3AA92E3408",
+      "number": 12,
+      "par": 3,
+      "strokeIndex": 12,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "33A594CF-10B7-44D7-9CD0-7B437C144A00",
+      "number": 13,
+      "par": 5,
+      "strokeIndex": 13,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "12E1724B-001D-4534-8AAF-4B7E1413B021",
+      "number": 14,
+      "par": 4,
+      "strokeIndex": 14,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "F5762F76-659A-4025-A4B8-10C04A798C1A",
+      "number": 15,
+      "par": 3,
+      "strokeIndex": 15,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "297D6697-F851-41C8-94C3-269CA4A192FE",
+      "number": 16,
+      "par": 4,
+      "strokeIndex": 16,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "8F00C059-8DCC-4E70-9C0D-2392104DAAE1",
+      "number": 17,
+      "par": 5,
+      "strokeIndex": 17,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    },
+    {
+      "id": "8B19AA42-1C72-4079-AE63-872A9FF3A8A5",
+      "number": 18,
+      "par": 4,
+      "strokeIndex": 18,
+      "teeBoxes": [],
+      "fairwayPerimeter": [],
+      "green": {
+        "perimeter": []
+      },
+      "greenOverlay": {},
+      "features": [],
+      "waypoints": []
+    }
   ]
 }

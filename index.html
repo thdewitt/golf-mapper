@@ -501,11 +501,25 @@
   /// perimeter vertex with the most negative / positive projection onto the
   /// approach axis; that's close enough for distance display since user-
   /// traced greens have plenty of vertices.
+  /// Wrap a {latitude, longitude} into a full MapPoint matching the scoring
+  /// app's expected shape (accuracy/sampleCount/capturedAt/source).
+  function asMapPoint(p, source = 'derived') {
+    if (!p) return null;
+    return {
+      latitude: p.latitude,
+      longitude: p.longitude,
+      accuracy: p.accuracy ?? 3,
+      sampleCount: p.sampleCount ?? 1,
+      capturedAt: p.capturedAt ?? isoNow(),
+      source: p.source ?? source,
+    };
+  }
+
   function autoSetGreenCenterFrontBack(hole, greenObj) {
     if (!greenObj || !greenObj.perimeter || greenObj.perimeter.length < 3) return;
     const center = centroidOf(greenObj.perimeter);
     if (!center) return;
-    greenObj.center = center;
+    greenObj.center = asMapPoint(center);
 
     const fairway = hole.fairwayPerimeter;
     if (!fairway || fairway.length < 3) return; // leave front/back unset
@@ -526,8 +540,10 @@
       if (proj < minProj) { minProj = proj; frontPt = p; }
       if (proj > maxProj) { maxProj = proj; backPt  = p; }
     }
-    if (frontPt) greenObj.front = { latitude: frontPt.latitude, longitude: frontPt.longitude };
-    if (backPt)  greenObj.back  = { latitude: backPt.latitude,  longitude: backPt.longitude  };
+    // Front/back come from existing user-traced perimeter points which are
+    // already full MapPoints, but wrap defensively in case any drift in.
+    if (frontPt) greenObj.front = asMapPoint(frontPt);
+    if (backPt)  greenObj.back  = asMapPoint(backPt);
   }
 
   /// Build an auto-name for a bunker on the current hole, e.g. "FB #2 Right"
@@ -697,7 +713,11 @@
   }
 
   // Bootstrap a blank course in memory so the user can start mapping without
-  // an existing JSON file. Save JSON later to write it out.
+  // an existing JSON file. Save JSON later to write it out. The shape here
+  // MUST match what the scoring app's decoder expects: top-level id +
+  // teeColorsUsed, per-hole id + par + strokeIndex + fairwayPerimeter +
+  // greenOverlay + waypoints. If you add/remove fields, update both this
+  // bootstrap AND any starter JSONs in courses/ to keep them aligned.
   document.getElementById('new-btn').onclick = () => {
     if (course && !confirm('Discard the current course and start a new blank one?')) return;
     const clubName = (prompt('Club name:', 'Canyata Golf Club') || '').trim();
@@ -707,16 +727,25 @@
     const holeCountRaw = prompt('Number of holes:', '18');
     const holeCount = Math.max(1, Math.min(36, parseInt(holeCountRaw, 10) || 18));
     fileHandle = null; // any prior FSA handle no longer applies
+    const uuid = () => crypto.randomUUID().toUpperCase();
     course = {
+      id: uuid(),
       clubName,
       courseName,
       createdAt: isoNow(),
       updatedAt: isoNow(),
+      teeColorsUsed: [],
       holes: Array.from({ length: holeCount }, (_, i) => ({
+        id: uuid(),
         number: i + 1,
+        par: 4,           // user can edit per scorecard; total adjustable later
+        strokeIndex: i + 1,
         teeBoxes: [],
-        features: [],
+        fairwayPerimeter: [],
         green: { perimeter: [] },
+        greenOverlay: {},
+        features: [],
+        waypoints: [],
       })),
     };
     currentHoleIdx = 0;
